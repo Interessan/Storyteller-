@@ -78,6 +78,13 @@
     .layout{ grid-template-columns: 1fr; max-width:none; }
     .spine{ display:none; }
   }
+  /* alternância manual celular/PC, sobrepõe a media query acima */
+  #app.force-mobile .layout{ grid-template-columns: 1fr !important; max-width:none !important; }
+  #app.force-mobile .spine{ display:none !important; }
+  #app.force-mobile .page{ max-width:100% !important; }
+  #app.force-desktop .layout{ grid-template-columns: 1fr 46px !important; max-width:1500px !important; }
+  #app.force-desktop .spine{ display:flex !important; }
+  .layout-toggle{ font-size:10px !important; padding:6px 9px !important; }
 
   /* memory panel — agora é uma gaveta que desliza, não faz parte do grid */
   .layout > *{ min-width:0; }
@@ -127,6 +134,7 @@
     max-width:720px; margin:0 auto; background:var(--parchment); color:var(--parchment-ink);
     border-radius:10px; padding:26px 30px; font-size:15.5px; line-height:1.75;
     box-shadow: 0 1px 0 rgba(0,0,0,.2), inset 0 0 0 1px rgba(0,0,0,.04);
+    white-space: pre-wrap;
   }
   .turn{ position:relative; display:inline; }
   .turn.user{ font-style:italic; color:#5a4a30; }
@@ -460,7 +468,8 @@
       composerText: '',
       collapsed: new Set(),   // chaves tipo 'char:ID', 'loc:ID', 'group:ID'
       memoryPanelOpen: false,
-      lastDebug: null
+      lastDebug: null,
+      forcedLayout: (function(){ try{ return localStorage.getItem('aventura:forcedLayout') || 'auto'; }catch(e){ return 'auto'; } })()
     }
   };
 
@@ -1182,6 +1191,9 @@
   function render(){
     const app = document.getElementById('app');
     const s = state.story;
+    app.classList.remove('force-mobile', 'force-desktop');
+    if (state.ui.forcedLayout === 'mobile') app.classList.add('force-mobile');
+    if (state.ui.forcedLayout === 'desktop') app.classList.add('force-desktop');
     if (!s){ app.innerHTML = '<div style="padding:40px;text-align:center;color:#9a9fb0;">Carregando…</div>'; return; }
 
     app.innerHTML = `
@@ -1198,8 +1210,9 @@
           <button class="icon" id="btnMemory" title="Memória, personagens, locais...">📖 Memória</button>
           <button class="icon" id="btnStories" title="Minhas histórias">📚</button>
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
+          <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout celular/PC manualmente">${state.ui.forcedLayout === 'mobile' ? '📱 Celular' : state.ui.forcedLayout === 'desktop' ? '🖥️ PC' : '🔄 Auto'}</button>
           <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
-          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v9</span>
+          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v10</span>
         </div>
       </header>
       <div class="drawer-backdrop ${state.ui.memoryPanelOpen ? 'open' : ''}" id="memoryBackdrop"></div>
@@ -1552,6 +1565,14 @@
     const btnCloseMemory = $('#btnCloseMemory'); if (btnCloseMemory) btnCloseMemory.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
     const memoryBackdrop = $('#memoryBackdrop'); if (memoryBackdrop) memoryBackdrop.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
     const btnNew = $('#btnNew'); if (btnNew) btnNew.onclick = createStory;
+    const btnLayoutToggle = $('#btnLayoutToggle');
+    if (btnLayoutToggle) btnLayoutToggle.onclick = () => {
+      const order = ['auto', 'mobile', 'desktop'];
+      const next = order[(order.indexOf(state.ui.forcedLayout) + 1) % order.length];
+      state.ui.forcedLayout = next;
+      try{ localStorage.setItem('aventura:forcedLayout', next); }catch(e){}
+      render();
+    };
 
     const bind = (id, ev, fn) => { const e = $(id); if (e) e.addEventListener(ev, fn); };
     bind('#memWorld','input', e => { state.story.memory.world = e.target.value; scheduleSave(); });

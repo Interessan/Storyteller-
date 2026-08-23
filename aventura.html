@@ -747,13 +747,15 @@
     return t;
   }
 
-  async function callOpenAICompatible(messages){
+  async function callOpenAICompatible(messages, attempt){
+    attempt = attempt || 1;
     const c = activeConnector();
     if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
+    if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações (ex: openai/gpt-4o-mini).');
     const headers = {'Content-Type':'application/json'};
     if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
     const reqBody = {
-      model: c.oaModel || undefined,
+      model: c.oaModel,
       messages,
       max_tokens: c.maxLength,
       temperature: c.temperature
@@ -762,8 +764,22 @@
     try{
       res = await fetch(c.oaEndpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
     }catch(err){
-      recordDebug('openai', reqBody, null, err.message + ' (provavelmente CORS bloqueado pelo navegador — o provedor precisa permitir chamadas de outro site)');
-      throw new Error('Falha de rede/CORS ao chamar a API. Veja o modo de depuração nas Configurações.');
+      recordDebug('openai', reqBody, null, err.message + ' — endpoint usado: "' + c.oaEndpoint + '". Verifique se está exatamente certo, se não há bloqueador de anúncios/privacidade ativo, e se a rede atual não bloqueia o domínio.');
+      throw new Error('Falha de rede ao chamar a API. Confira o endereço do endpoint e veja o modo de depuração nas Configurações.');
+    }
+    if (res.status === 429 && attempt < 4){
+      const t = await res.text().catch(()=> '');
+      let waitSecs = 4;
+      try{
+        const parsed = JSON.parse(t);
+        waitSecs = (parsed.error && parsed.error.metadata && parsed.error.metadata.retry_after_seconds) || 4;
+      }catch(e){}
+      const retryHeader = res.headers.get('Retry-After');
+      if (retryHeader) waitSecs = parseInt(retryHeader) || waitSecs;
+      updateStatus('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's… (tentativa ' + attempt + '/3)', false);
+      render();
+      await new Promise(r => setTimeout(r, waitSecs * 1000));
+      return callOpenAICompatible(messages, attempt + 1);
     }
     if (!res.ok){
       const t = await res.text().catch(()=> '');
@@ -1254,7 +1270,7 @@
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
           <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout celular/PC manualmente">${state.ui.forcedLayout === 'mobile' ? '📱 Celular' : state.ui.forcedLayout === 'desktop' ? '🖥️ PC' : '🔄 Auto'}</button>
           <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
-          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v13</span>
+          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v15</span>
         </div>
       </header>
       <div class="drawer-backdrop ${state.ui.memoryPanelOpen ? 'open' : ''}" id="memoryBackdrop"></div>

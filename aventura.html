@@ -190,12 +190,16 @@
   .retry-group button:not(:last-child){ border-right:1px solid var(--border); }
   .retry-nav{ padding:9px 10px !important; }
   .retry-count{ padding:0 8px; font-size:10.5px; color:var(--muted); white-space:nowrap; }
+  .dungeon-bar-main{ display:flex; gap:7px; }
+  .dungeon-bar-main > button{ flex:1 1 0; }
+  .dungeon-bar-main > .retry-group{ flex:1.4 1 0; justify-content:center; }
+  .dungeon-bar-secondary button{ flex:0 0 auto; }
   @media (max-width: 480px){
-    .dungeon-bar button{ padding:11px 12px; font-size:12px; }
-    .dungeon-bar-main{ flex-direction:column; align-items:stretch; }
-    .dungeon-bar-main > button, .dungeon-bar-main > .retry-group{ width:100%; justify-content:center; }
-    .retry-group{ display:flex; width:100%; }
-    .retry-group button{ flex:1 1 auto; }
+    .dungeon-bar button{ padding:10px 8px; font-size:11px; }
+    .retry-group{ display:flex; }
+    .retry-group button{ flex:1 1 auto; padding-left:6px !important; padding-right:6px !important; }
+    .dungeon-bar-secondary{ flex-wrap:wrap; }
+    .dungeon-bar-secondary button{ font-size:10px; padding:6px 9px; }
   }
   .composer-row .spacer{ flex:1; }
   .status{ font-family:'JetBrains Mono'; font-size:11px; color:var(--muted); }
@@ -412,11 +416,15 @@
       client_id: state.drive.clientId,
       scope: 'https://www.googleapis.com/auth/drive.appdata',
       callback: async (resp) => {
-        if (resp.error){ updateStatus('Erro ao entrar com Google: ' + resp.error, true); render(); return; }
+        if (resp.error){
+          if (!state.drive.signedIn) return; // falha numa tentativa silenciosa — não incomoda o usuário
+          updateStatus('Erro ao entrar com Google: ' + resp.error, true); render(); return;
+        }
         state.drive.token = resp.access_token;
         state.drive.tokenExpiry = Date.now() + (resp.expires_in || 3500) * 1000;
         state.drive.signedIn = true;
         state.drive.loaded = false;
+        try{ localStorage.setItem('aventura:driveWasSignedIn', '1'); }catch(e){}
         updateStatus('Conectando ao Google Drive…', false);
         render();
         try{
@@ -448,8 +456,29 @@
     state.drive.token = null;
     state.drive.loaded = false;
     state.drive.store = {};
+    try{ localStorage.removeItem('aventura:driveWasSignedIn'); }catch(e){}
     await init();
     render();
+  }
+
+  // tenta reconectar sozinho, sem popup, se essa conta já entrou antes nesse navegador
+  function attemptSilentGoogleSignIn(){
+    let wasSignedIn = false;
+    try{ wasSignedIn = localStorage.getItem('aventura:driveWasSignedIn') === '1'; }catch(e){}
+    if (!wasSignedIn || !state.drive.clientId) return;
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries++;
+      if (typeof google !== 'undefined' && google.accounts){
+        clearInterval(poll);
+        initGoogleTokenClient();
+        if (state.drive.tokenClient){
+          try{ state.drive.tokenClient.requestAccessToken({ prompt: '' }); }catch(e){}
+        }
+      } else if (tries > 20){
+        clearInterval(poll);
+      }
+    }, 250);
   }
 
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -1225,7 +1254,7 @@
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
           <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout celular/PC manualmente">${state.ui.forcedLayout === 'mobile' ? '📱 Celular' : state.ui.forcedLayout === 'desktop' ? '🖥️ PC' : '🔄 Auto'}</button>
           <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
-          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v12</span>
+          <span class="mono" style="font-size:11px;color:var(--amber);opacity:.9;font-weight:600;">v13</span>
         </div>
       </header>
       <div class="drawer-backdrop ${state.ui.memoryPanelOpen ? 'open' : ''}" id="memoryBackdrop"></div>
@@ -1378,11 +1407,11 @@
                   ` : ''; })()}
                   <button id="btnRetryOptions" title="Dar uma instrução específica pro retry">🎯</button>
                 </div>
-                <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
               </div>
               <div class="dungeon-bar dungeon-bar-secondary">
                 <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer última mudança">↩ Desfazer</button>
                 <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
+                <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
                 <span class="spacer"></span>
                 <span class="status ${state.ui.statusErr?'err':''}">${esc(state.ui.statusMsg)}</span>
               </div>
@@ -1694,6 +1723,7 @@
   }
 
   init();
+  attemptSilentGoogleSignIn();
 })();
 </script>
 </body>

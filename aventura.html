@@ -182,6 +182,7 @@
   }
   .composer textarea:focus{ outline:none; border-color:var(--amber-dim); }
   .composer-row{ display:flex; gap:8px; margin-top:8px; align-items:center; }
+  .token-estimate{ font-size:10px; color:var(--muted); margin-top:4px; opacity:.75; }
   .dungeon-bar{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:9px; }
   .dungeon-bar button{ padding:9px 13px; font-size:11.5px; white-space:nowrap; }
   .dungeon-bar-secondary{ margin-top:6px; }
@@ -527,9 +528,29 @@
       oaModel: '',
       maxLength: 550,
       temperature: 0.85,
-      contextTurns: 14,
+      historyTokenBudget: 3000,   // orçamento de tokens pro histórico de falas
+      maxHistoryTurns: 40,        // teto de segurança (nº de falas), mesmo que o orçamento permitisse mais
       debugMode: false
     };
+  }
+
+  // estimativa simples (sem tokenizer real): ~4 caracteres por token, aproximação padrão usada em ferramentas client-side
+  function estimateTokens(str){
+    return Math.ceil((str || '').length / 4);
+  }
+
+  // seleciona as falas mais recentes que couberem dentro do orçamento de tokens, sempre incluindo ao menos a última
+  function selectTurnsByBudget(turns, budgetTokens, maxCount){
+    const selected = [];
+    let total = 0;
+    for (let i = turns.length - 1; i >= 0 && selected.length < maxCount; i--){
+      const t = turns[i];
+      const cost = estimateTokens(t.text);
+      if (selected.length > 0 && total + cost > budgetTokens) break;
+      selected.unshift(t);
+      total += cost;
+    }
+    return selected;
   }
 
   function newStory(title){
@@ -594,15 +615,21 @@
       if (typeof c.knows !== 'string') c.knows = '';
       if (typeof c.origin !== 'string') c.origin = '';
       if (typeof c.relations !== 'string') c.relations = '';
+      if (typeof c.alwaysOn !== 'boolean') c.alwaysOn = true;
+      if (typeof c.keywords !== 'string') c.keywords = '';
     });
     s.memory.locations.forEach(l => {
       if (typeof l.origin !== 'string') l.origin = '';
       if (typeof l.desc !== 'string') l.desc = '';
       if (typeof l.notes !== 'string') l.notes = '';
+      if (typeof l.alwaysOn !== 'boolean') l.alwaysOn = true;
+      if (typeof l.keywords !== 'string') l.keywords = '';
     });
     s.memory.groups.forEach(g => {
       if (typeof g.members !== 'string') g.members = '';
       if (typeof g.dynamic !== 'string') g.dynamic = '';
+      if (typeof g.alwaysOn !== 'boolean') g.alwaysOn = true;
+      if (typeof g.keywords !== 'string') g.keywords = '';
     });
     // migra o antigo campo "persona" livre pra uma ficha de protagonista, uma única vez
     if (!s.migratedPersona && s.memory.persona && !s.memory.characters.some(c => c.isProtagonist)){
@@ -653,9 +680,23 @@
     return (state.story && state.story.connector) ? state.story.connector : state.connector;
   }
 
-  function buildCharactersBlock(characters){
+  // verifica se algum "gatilho" (nome + palavras-chave extras) aparece no texto recente
+  function cardMatchesText(card, haystackLower){
+    if (card.alwaysOn !== false) return true; // padrão: sempre inclui (compatível com fichas antigas)
+    const triggers = [];
+    if (card.name) triggers.push(...card.name.split(/\s+/));
+    if (card.keywords) triggers.push(...card.keywords.split(','));
+    return triggers.some(w => {
+      w = w.trim().toLowerCase();
+      return w.length >= 3 && haystackLower.includes(w);
+    });
+  }
+
+  function buildCharactersBlock(characters, haystackLower){
     if (!characters || !characters.length) return '';
-    const lines = characters.map(c => {
+    const active = characters.filter(c => cardMatchesText(c, haystackLower));
+    if (!active.length) return '';
+    const lines = active.map(c => {
       const tag = c.isProtagonist ? '[PROTAGONISTA] ' : '';
       const bits = [tag + (c.name || 'Sem nome')];
       if (c.origin) bits.push('origem: ' + c.origin);
@@ -670,9 +711,11 @@
     return 'FICHAS DE PERSONAGENS (respeite estritamente origem, aparência, personalidade, relações e o que cada um sabe — vale até para o protagonista; em crossovers, não misture regras/poderes de universos diferentes a menos que a história explique isso):\n' + lines.join('\n');
   }
 
-  function buildLocationsBlock(locations){
+  function buildLocationsBlock(locations, haystackLower){
     if (!locations || !locations.length) return '';
-    const lines = locations.map(l => {
+    const active = locations.filter(l => cardMatchesText(l, haystackLower));
+    if (!active.length) return '';
+    const lines = active.map(l => {
       const bits = [l.name || 'Sem nome'];
       if (l.origin) bits.push('origem: ' + l.origin);
       if (l.desc) bits.push('descrição: ' + l.desc);
@@ -682,9 +725,11 @@
     return 'LOCAIS (mantenha a geografia e detalhes consistentes):\n' + lines.join('\n');
   }
 
-  function buildGroupsBlock(groups){
+  function buildGroupsBlock(groups, haystackLower){
     if (!groups || !groups.length) return '';
-    const lines = groups.map(g => {
+    const active = groups.filter(g => cardMatchesText(g, haystackLower));
+    if (!active.length) return '';
+    const lines = active.map(g => {
       const bits = [g.name || 'Sem nome'];
       if (g.members) bits.push('membros: ' + g.members);
       if (g.dynamic) bits.push('dinâmica/relação entre eles: ' + g.dynamic);
@@ -697,6 +742,13 @@
     opts = opts || {};
     const s = state.story;
     const conn = activeConnector();
+
+    // primeiro decide quais falas entram (por orçamento de tokens), pra saber o "texto recente" que ativa o lorebook
+    let liveTurns = s.turns.filter(t => !t.archived);
+    if (opts.excludeTurnId) liveTurns = liveTurns.filter(t => t.id !== opts.excludeTurnId);
+    liveTurns = selectTurnsByBudget(liveTurns, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
+    const haystackLower = (liveTurns.map(t => t.text).join(' ') + ' ' + (actionText || '')).toLowerCase();
+
     const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi"). É uma narração contínua, não um relato do passado.';
     const sys = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
@@ -706,9 +758,9 @@
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       s.memory.summary ? ('Resumo do que já aconteceu antes: ' + s.memory.summary) : '',
-      buildCharactersBlock(s.memory.characters),
-      buildLocationsBlock(s.memory.locations),
-      buildGroupsBlock(s.memory.groups),
+      buildCharactersBlock(s.memory.characters, haystackLower),
+      buildLocationsBlock(s.memory.locations, haystackLower),
+      buildGroupsBlock(s.memory.groups, haystackLower),
       s.memory.secrets ? (
         'SEGREDOS DO MUNDO (conhecimento do narrador, NÃO do protagonista): ' + s.memory.secrets +
         '\nRegra importante: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história. Não as revele na narração até que a trama naturalmente leve a essa descoberta.'
@@ -719,9 +771,6 @@
       'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa, tempo presente. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
-    let liveTurns = s.turns.filter(t => !t.archived);
-    if (opts.excludeTurnId) liveTurns = liveTurns.filter(t => t.id !== opts.excludeTurnId);
-    liveTurns = liveTurns.slice(-1 * (conn.contextTurns || 14));
     const messages = [{role:'system', content: sys}];
     liveTurns.forEach(t => {
       messages.push({ role: t.type === 'user' ? 'user' : 'assistant', content: t.text });
@@ -1135,9 +1184,9 @@
     if (type === 'group') return state.story.memory.groups;
   }
   function blankCard(type){
-    if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false};
-    if (type === 'loc') return {id: uid(), name:'', origin:'', desc:'', notes:''};
-    if (type === 'group') return {id: uid(), name:'', members:'', dynamic:''};
+    if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false, alwaysOn:true, keywords:''};
+    if (type === 'loc') return {id: uid(), name:'', origin:'', desc:'', notes:'', alwaysOn:true, keywords:''};
+    if (type === 'group') return {id: uid(), name:'', members:'', dynamic:'', alwaysOn:true, keywords:''};
   }
   function addCard(type){
     cardCollection(type).push(blankCard(type));
@@ -1328,6 +1377,10 @@
                   <label class="protag-check">
                     <input type="checkbox" data-cprotag="${c.id}" ${c.isProtagonist?'checked':''}> é a protagonista
                   </label>
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="char:${c.id}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citada)
+                  </label>
+                  ${c.alwaysOn===false ? `<input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
                   <textarea data-ctype="char" data-cid="${c.id}" data-cfield="appearance" rows="2" placeholder="Aparência física...">${esc(c.appearance)}</textarea>
                   <textarea data-ctype="char" data-cid="${c.id}" data-cfield="personality" rows="2" placeholder="Personalidade, jeito de ser...">${esc(c.personality)}</textarea>
                   <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relations" rows="2" placeholder="Relações/família (ex: irmã mais nova de X, casada com Y...)">${esc(c.relations)}</textarea>
@@ -1357,6 +1410,10 @@
                 </div>
                 ${collapsed ? '' : `
                   <input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="origin" value="${esc(l.origin)}" placeholder="Origem/universo (ex: Naruto, original...)" style="margin-bottom:5px;">
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="loc:${l.id}" ${l.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citado)
+                  </label>
+                  ${l.alwaysOn===false ? `<input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="keywords" value="${esc(l.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
                   <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="desc" rows="2" placeholder="Como é esse lugar...">${esc(l.desc)}</textarea>
                   <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="notes" rows="2" placeholder="Detalhes importantes (perigos, segredos, quem mora lá...)">${esc(l.notes)}</textarea>
                 `}
@@ -1382,6 +1439,10 @@
                   <button class="danger icon" data-cdel="${key}">✕</button>
                 </div>
                 ${collapsed ? '' : `
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="group:${g.id}" ${g.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citado)
+                  </label>
+                  ${g.alwaysOn===false ? `<input type="text" data-ctype="group" data-cid="${g.id}" data-cfield="keywords" value="${esc(g.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
                   <textarea data-ctype="group" data-cid="${g.id}" data-cfield="members" rows="2" placeholder="Quem faz parte (nomes)...">${esc(g.members)}</textarea>
                   <textarea data-ctype="group" data-cid="${g.id}" data-cfield="dynamic" rows="2" placeholder="Como se tratam, hierarquia, tensões...">${esc(g.dynamic)}</textarea>
                 `}
@@ -1411,6 +1472,7 @@
           <div class="composer" style="${editingTurnId ? 'display:none;' : ''}">
             <div class="composer-inner">
               <textarea id="composer" placeholder="O que eu faço agora?" rows="2">${esc(state.ui.composerText)}</textarea>
+              <div id="tokenEstimate" class="token-estimate mono"></div>
 
               ${state.ui.retryGuidanceOpen ? `
                 <div class="retry-guidance">
@@ -1469,6 +1531,8 @@
 
     const editbox = document.querySelector('.turn-editbox');
     if (editbox) autoSizeTextarea(editbox);
+
+    updateTokenEstimateDisplay();
   }
 
   function autoSizeTextarea(el){
@@ -1476,6 +1540,18 @@
     el.style.height = el.scrollHeight + 'px';
   }
 
+  function updateTokenEstimateDisplay(){
+    const el = document.getElementById('tokenEstimate');
+    if (!el || !state.story) return;
+    try{
+      const draft = state.ui.composerText || '';
+      const {messages} = buildPromptMessages(draft, {});
+      const total = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+      el.textContent = '≈ ' + total + ' tokens nesta próxima mensagem (estimativa)';
+    }catch(e){
+      el.textContent = '';
+    }
+  }
   function renderTurn(t, i){
     const isEditing = editingTurnId === t.id;
     const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '');
@@ -1505,7 +1581,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v19</strong>
+          Versão do app: <strong>v20</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -1577,9 +1653,19 @@
             <input type="text" id="temperature" value="${c.temperature}">
           </div>
         </div>
-        <div class="field">
-          <label>Turnos de contexto enviados a cada mensagem</label>
-          <input type="text" id="contextTurns" value="${c.contextTurns}">
+        <div class="row2">
+          <div class="field">
+            <label>Orçamento de tokens pro histórico</label>
+            <input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}">
+          </div>
+          <div class="field">
+            <label>Teto de falas (segurança)</label>
+            <input type="text" id="maxHistoryTurns" value="${c.maxHistoryTurns}">
+          </div>
+        </div>
+        <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
+          Em vez de sempre mandar um número fixo de falas, o app inclui as falas mais recentes que couberem dentro desse orçamento
+          (estimativa aproximada). O "teto de falas" é só uma trava de segurança, caso você escreva ações bem curtas.
         </div>
         <div class="field">
           <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (mostra a resposta crua da API)</label>
@@ -1690,8 +1776,16 @@
       updateCard('char', e.target.dataset.cprotag, 'isProtagonist', e.target.checked);
       render();
     }));
+    $$('[data-alwayson]').forEach(chk => chk.addEventListener('change', e => {
+      const [t, id] = e.target.dataset.alwayson.split(':');
+      updateCard(t, id, 'alwaysOn', e.target.checked);
+      render();
+    }));
 
-    bind('#composer','input', e => { state.ui.composerText = e.target.value; });
+    bind('#composer','input', e => {
+      state.ui.composerText = e.target.value;
+      updateTokenEstimateDisplay();
+    });
     bind('#composer','keydown', e => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); sendAction(); }
     });
@@ -1750,7 +1844,8 @@
       }
       c.maxLength = parseInt(g('maxLength')) || 220;
       c.temperature = parseFloat(g('temperature')) || 0.85;
-      c.contextTurns = parseInt(g('contextTurns')) || 14;
+      c.historyTokenBudget = parseInt(g('historyTokenBudget')) || 3000;
+      c.maxHistoryTurns = parseInt(g('maxHistoryTurns')) || 40;
       c.debugMode = !!document.getElementById('debugMode').checked;
       await sSet('settings:connector', c);
       state.ui.modal = null;

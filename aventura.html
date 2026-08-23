@@ -525,7 +525,7 @@
       oaEndpoint: '',
       oaKey: '',
       oaModel: '',
-      maxLength: 220,
+      maxLength: 550,
       temperature: 0.85,
       contextTurns: 14,
       debugMode: false
@@ -696,11 +696,13 @@
   function buildPromptMessages(actionText, opts){
     opts = opts || {};
     const s = state.story;
+    const conn = activeConnector();
     const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi"). É uma narração contínua, não um relato do passado.';
     const sys = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
       povLine,
-      'Continue a história de forma coerente com tudo que já aconteceu. Escreva cenas vívidas mas não excessivamente longas (1 a 3 parágrafos). Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora" — apenas pare no ponto certo pra próxima ação encaixar naturalmente.',
+      'Continue a história de forma coerente com tudo que já aconteceu. Escreva cenas vívidas mas não excessivamente longas. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora" — apenas pare no ponto certo pra próxima ação encaixar naturalmente.',
+      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 220) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       s.memory.summary ? ('Resumo do que já aconteceu antes: ' + s.memory.summary) : '',
@@ -714,10 +716,9 @@
       'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores. Nunca faça um personagem (incluindo o protagonista) reagir a uma informação que ele não teve como obter ainda.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
-      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa, tempo presente. Não repita nem resuma o que já aconteceu — apenas continue.'
+      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa, tempo presente. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
-    const conn = activeConnector();
     let liveTurns = s.turns.filter(t => !t.archived);
     if (opts.excludeTurnId) liveTurns = liveTurns.filter(t => t.id !== opts.excludeTurnId);
     liveTurns = liveTurns.slice(-1 * (conn.contextTurns || 14));
@@ -762,7 +763,7 @@
     const reqBody = {
       model: c.oaModel,
       messages,
-      max_tokens: c.maxLength,
+      max_tokens: (c.maxLength || 220) + 40,
       temperature: c.temperature
     };
     let res, data;
@@ -796,7 +797,11 @@
     const choice = data.choices && data.choices[0];
     const text = choice && (choice.message ? choice.message.content : choice.text);
     if (!text) throw new Error('Resposta da API veio sem texto (veja o modo de depuração).');
-    return { text: text.trim(), meta: data.usage ? ('~' + data.usage.total_tokens + ' tokens') : null, usage: data.usage || null };
+    const cutOff = choice && (choice.finish_reason === 'length' || choice.finish_reason === 'max_tokens');
+    const metaBits = [];
+    if (data.usage) metaBits.push('~' + data.usage.total_tokens + ' tokens');
+    if (cutOff) metaBits.push('⚠ cortada pelo limite — aumente "tamanho máx. da resposta" nas Configurações');
+    return { text: text.trim(), meta: metaBits.join(' · ') || null, usage: data.usage || null };
   }
 
   async function callAiHorde(messages){
@@ -811,7 +816,7 @@
       params: {
         n: 1,
         max_context_length: 2048,
-        max_length: c.maxLength,
+        max_length: (c.maxLength || 220) + 40,
         temperature: c.temperature,
         rep_pen: 1.1,
         top_p: 0.92
@@ -1500,7 +1505,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v18</strong>
+          Versão do app: <strong>v19</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

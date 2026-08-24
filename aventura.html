@@ -128,6 +128,11 @@
   .pov-toggle button{ flex:1; }
   .pov-toggle button.active{ background:var(--amber); color:#221806; border-color:var(--amber); }
   .summ-note{ font-size:11px; color:var(--muted); line-height:1.5; }
+  .nudge-banner{
+    background:rgba(213,154,68,0.1); border:1px solid rgba(213,154,68,0.35); border-radius:7px;
+    padding:9px 10px; font-size:11.5px; color:#f0dcb0; line-height:1.5; margin-bottom:8px;
+  }
+  .nudge-banner button{ font-size:11px; padding:6px 10px; }
   .summ-note.err{ color:#f0b7a4; }
 
   /* main / feed */
@@ -513,7 +518,9 @@
       memoryPanelOpen: false,
       lastDebug: null,
       forcedLayout: (function(){ try{ return localStorage.getItem('aventura:forcedLayout') || 'auto'; }catch(e){ return 'auto'; } })(),
-      openActionsFor: null
+      openActionsFor: null,
+      summarizing: false,
+      nudgeDismissedAt: 0
     }
   };
 
@@ -530,6 +537,7 @@
       temperature: 0.85,
       historyTokenBudget: 3000,   // orçamento de tokens pro histórico de falas
       maxHistoryTurns: 40,        // teto de segurança (nº de falas), mesmo que o orçamento permitisse mais
+      cardsTokenBudget: 1200,     // orçamento de tokens pro bloco de fichas (personagens/locais/grupos) combinado
       debugMode: false
     };
   }
@@ -605,6 +613,14 @@
     if (typeof s.memory.world !== 'string') s.memory.world = '';
     if (typeof s.memory.authorNote !== 'string') s.memory.authorNote = '';
     if (typeof s.memory.summary !== 'string') s.memory.summary = '';
+    if (!s.memory.chapters) s.memory.chapters = [];
+    // migra o resumo único antigo pra virar o primeiro capítulo, uma única vez
+    if (!s.migratedChapters){
+      if (s.memory.summary && !s.memory.chapters.length){
+        s.memory.chapters.push({ id: uid(), title: 'Capítulo 1', text: s.memory.summary });
+      }
+      s.migratedChapters = true;
+    }
     // completa campos novos em fichas antigas
     s.memory.characters.forEach(c => {
       if (typeof c.age !== 'string') c.age = '';
@@ -681,22 +697,28 @@
   }
 
   // verifica se algum "gatilho" (nome + palavras-chave extras) aparece no texto recente
-  function cardMatchesText(card, haystackLower){
-    if (card.alwaysOn !== false) return true; // padrão: sempre inclui (compatível com fichas antigas)
+  function cardTriggerWords(card){
     const triggers = [];
     if (card.name) triggers.push(...card.name.split(/\s+/));
     if (card.keywords) triggers.push(...card.keywords.split(','));
-    return triggers.some(w => {
-      w = w.trim().toLowerCase();
-      return w.length >= 3 && haystackLower.includes(w);
-    });
+    return triggers.map(w => w.trim().toLowerCase()).filter(w => w.length >= 3);
   }
-
-  function buildCharactersBlock(characters, haystackLower){
-    if (!characters || !characters.length) return '';
-    const active = characters.filter(c => cardMatchesText(c, haystackLower));
-    if (!active.length) return '';
-    const lines = active.map(c => {
+  function cardMatchesText(card, haystackLower){
+    if (card.alwaysOn !== false) return true; // padrão: sempre inclui (compatível com fichas antigas)
+    return cardTriggerWords(card).some(w => haystackLower.includes(w));
+  }
+  // acha a posição (índice) da fala mais recente onde essa ficha foi citada — usado pra priorizar quem "apareceu" há menos tempo
+  function findLastMentionIndex(card, liveTurns){
+    const words = cardTriggerWords(card);
+    if (!words.length) return -1;
+    for (let i = liveTurns.length - 1; i >= 0; i--){
+      const low = liveTurns[i].text.toLowerCase();
+      if (words.some(w => low.includes(w))) return i;
+    }
+    return -1;
+  }
+  function cardLine(type, c){
+    if (type === 'char'){
       const tag = c.isProtagonist ? '[PROTAGONISTA] ' : '';
       const bits = [tag + (c.name || 'Sem nome')];
       if (c.origin) bits.push('origem: ' + c.origin);
@@ -707,35 +729,80 @@
       if (c.desc) bits.push('histórico/papel: ' + c.desc);
       if (c.knows) bits.push('sabe até agora: ' + c.knows);
       return '- ' + bits.join(' | ');
+    }
+    if (type === 'loc'){
+      const bits = [c.name || 'Sem nome'];
+      if (c.origin) bits.push('origem: ' + c.origin);
+      if (c.desc) bits.push('descrição: ' + c.desc);
+      if (c.notes) bits.push('detalhes importantes: ' + c.notes);
+      return '- ' + bits.join(' | ');
+    }
+    if (type === 'group'){
+      const bits = [c.name || 'Sem nome'];
+      if (c.members) bits.push('membros: ' + c.members);
+      if (c.dynamic) bits.push('dinâmica/relação entre eles: ' + c.dynamic);
+      return '- ' + bits.join(' | ');
+    }
+    return '';
+  }
+  // decide quais fichas entram: as "sempre incluir" nunca são cortadas; entre as citadas por palavra-chave,
+  // prioriza quem foi mencionado mais recentemente, até estourar o orçamento de tokens
+  function selectCardsWithinBudget(characters, locations, groups, liveTurns, haystackLower, budgetTokens){
+    const makeCandidates = (list, type) => (list || []).map(c => ({
+      type, card: c,
+      alwaysOn: c.alwaysOn !== false,
+      matched: cardMatchesText(c, haystackLower),
+      lastMention: findLastMentionIndex(c, liveTurns)
+    })).filter(x => x.alwaysOn || x.matched);
+
+    const all = [
+      ...makeCandidates(characters, 'char'),
+      ...makeCandidates(locations, 'loc'),
+      ...makeCandidates(groups, 'group')
+    ];
+    const mandatory = all.filter(x => x.alwaysOn);
+    const optional = all.filter(x => !x.alwaysOn).sort((a, b) => b.lastMention - a.lastMention);
+
+    const included = new Set(mandatory.map(x => x.card.id));
+    let used = mandatory.reduce((sum, x) => sum + estimateTokens(cardLine(x.type, x.card)), 0);
+    optional.forEach(cand => {
+      const cost = estimateTokens(cardLine(cand.type, cand.card));
+      if (used + cost > budgetTokens) return;
+      used += cost;
+      included.add(cand.card.id);
     });
+
+    return {
+      chars: (characters || []).filter(c => included.has(c.id)),
+      locs: (locations || []).filter(c => included.has(c.id)),
+      groups: (groups || []).filter(c => included.has(c.id))
+    };
+  }
+
+
+  function buildCharactersBlock(characters){
+    if (!characters || !characters.length) return '';
+    const lines = characters.map(c => cardLine('char', c));
     return 'FICHAS DE PERSONAGENS (respeite estritamente origem, aparência, personalidade, relações e o que cada um sabe — vale até para o protagonista; em crossovers, não misture regras/poderes de universos diferentes a menos que a história explique isso):\n' + lines.join('\n');
   }
 
-  function buildLocationsBlock(locations, haystackLower){
+  function buildLocationsBlock(locations){
     if (!locations || !locations.length) return '';
-    const active = locations.filter(l => cardMatchesText(l, haystackLower));
-    if (!active.length) return '';
-    const lines = active.map(l => {
-      const bits = [l.name || 'Sem nome'];
-      if (l.origin) bits.push('origem: ' + l.origin);
-      if (l.desc) bits.push('descrição: ' + l.desc);
-      if (l.notes) bits.push('detalhes importantes: ' + l.notes);
-      return '- ' + bits.join(' | ');
-    });
+    const lines = locations.map(l => cardLine('loc', l));
     return 'LOCAIS (mantenha a geografia e detalhes consistentes):\n' + lines.join('\n');
   }
 
-  function buildGroupsBlock(groups, haystackLower){
+  function buildGroupsBlock(groups){
     if (!groups || !groups.length) return '';
-    const active = groups.filter(g => cardMatchesText(g, haystackLower));
-    if (!active.length) return '';
-    const lines = active.map(g => {
-      const bits = [g.name || 'Sem nome'];
-      if (g.members) bits.push('membros: ' + g.members);
-      if (g.dynamic) bits.push('dinâmica/relação entre eles: ' + g.dynamic);
-      return '- ' + bits.join(' | ');
-    });
+    const lines = groups.map(g => cardLine('group', g));
     return 'GRUPOS / DINÂMICA FAMILIAR (respeite como esses personagens se tratam e se relacionam entre si):\n' + lines.join('\n');
+  }
+
+  function buildChaptersBlock(chapters){
+    if (!chapters || !chapters.length) return '';
+    const lines = chapters.map((c, i) => '[' + (c.title || ('Capítulo ' + (i + 1))) + '] ' + c.text).filter(l => l.trim());
+    if (!lines.length) return '';
+    return 'RESUMO DOS CAPÍTULOS ANTERIORES (na ordem em que aconteceram):\n' + lines.join('\n\n');
   }
 
   function buildPromptMessages(actionText, opts){
@@ -748,6 +815,10 @@
     if (opts.excludeTurnId) liveTurns = liveTurns.filter(t => t.id !== opts.excludeTurnId);
     liveTurns = selectTurnsByBudget(liveTurns, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
     const haystackLower = (liveTurns.map(t => t.text).join(' ') + ' ' + (actionText || '')).toLowerCase();
+    const activeCards = selectCardsWithinBudget(
+      s.memory.characters, s.memory.locations, s.memory.groups,
+      liveTurns, haystackLower, conn.cardsTokenBudget || 1200
+    );
 
     const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi"). É uma narração contínua, não um relato do passado.';
     const sys = [
@@ -757,10 +828,10 @@
       'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 220) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
-      s.memory.summary ? ('Resumo do que já aconteceu antes: ' + s.memory.summary) : '',
-      buildCharactersBlock(s.memory.characters, haystackLower),
-      buildLocationsBlock(s.memory.locations, haystackLower),
-      buildGroupsBlock(s.memory.groups, haystackLower),
+      buildChaptersBlock(s.memory.chapters),
+      buildCharactersBlock(activeCards.chars),
+      buildLocationsBlock(activeCards.locs),
+      buildGroupsBlock(activeCards.groups),
       s.memory.secrets ? (
         'SEGREDOS DO MUNDO (conhecimento do narrador, NÃO do protagonista): ' + s.memory.secrets +
         '\nRegra importante: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história. Não as revele na narração até que a trama naturalmente leve a essa descoberta.'
@@ -1144,6 +1215,7 @@
 
   // ---------- auto memory summarization ----------
   async function summarizeOldTurns(){
+    if (state.ui.summarizing) return;
     const s = state.story;
     const live = s.turns.filter(t => !t.archived);
     const chunk = live.slice(0, Math.max(0, live.length - 6)); // deixa as últimas 6 falas de fora
@@ -1152,7 +1224,7 @@
       render();
       return;
     }
-    state.ui.generating = true;
+    state.ui.summarizing = true;
     updateStatus('Resumindo o início da história…', false);
     render();
     try{
@@ -1166,13 +1238,13 @@
       if (conn.mode === 'horde') result = await callAiHorde(messages);
       else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
       else result = await callOpenAICompatible(messages);
-      s.memory.summary = (s.memory.summary ? s.memory.summary + ' ' : '') + result.text.trim();
+      s.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (s.memory.chapters.length + 1), text: result.text.trim() });
       chunk.forEach(t => { t.archived = true; });
       updateStatus('Início da história resumido e arquivado.', false);
     }catch(err){
       updateStatus('Erro ao resumir: ' + err.message, true);
     }
-    state.ui.generating = false;
+    state.ui.summarizing = false;
     scheduleSave();
     render();
   }
@@ -1222,6 +1294,22 @@
     }
     scheduleSave();
   }
+  function addChapterManual(){
+    state.story.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (state.story.memory.chapters.length + 1), text: '' });
+    scheduleSave();
+    render();
+  }
+  function updateChapter(id, field, value){
+    const ch = state.story.memory.chapters.find(c => c.id === id);
+    if (ch) ch[field] = value;
+    scheduleSave();
+  }
+  function removeChapter(id){
+    state.story.memory.chapters = state.story.memory.chapters.filter(c => c.id !== id);
+    scheduleSave();
+    render();
+  }
+
   function toggleCollapsed(key){
     const set = state.ui.collapsed;
     if (set.has(key)) set.delete(key); else set.add(key);
@@ -1345,11 +1433,37 @@
               <textarea id="memNote" rows="2" placeholder="Regras fixas, tom, coisas que nunca mudam...">${esc(s.memory.authorNote)}</textarea>
             </div>
             <div class="field">
-              <label>Resumo automático (editável)</label>
-              <textarea id="memSummary" rows="4" placeholder="Vai sendo preenchido conforme você resume trechos antigos.">${esc(s.memory.summary)}</textarea>
+              <label>Capítulos resumidos (editáveis)</label>
+              ${(() => {
+                const conn = activeConnector();
+                const totalLive = s.turns.filter(t => !t.archived);
+                const selected = selectTurnsByBudget(totalLive, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
+                const dropped = totalLive.length - selected.length;
+                const dismissedAt = state.ui.nudgeDismissedAt || 0;
+                if (dropped >= 10 && dropped > dismissedAt && !state.ui.summarizing){
+                  return `<div class="nudge-banner">
+                    ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo. Resumir agora evita perder esses detalhes.
+                    <div style="margin-top:7px; display:flex; gap:6px;">
+                      <button id="btnNudgeSummarize">🧠 Resumir agora</button>
+                      <button id="btnNudgeDismiss" class="ghost" data-dropped="${dropped}">dispensar</button>
+                    </div>
+                  </div>`;
+                }
+                return '';
+              })()}
+              ${s.memory.chapters.map(ch => `
+                <div class="char-card" data-chapterid="${ch.id}" style="margin-bottom:8px;">
+                  <div class="ccard-top">
+                    <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título do capítulo" style="flex:1;">
+                    <button class="danger icon" data-chapterdel="${ch.id}">✕</button>
+                  </div>
+                  <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo desse trecho da história...">${esc(ch.text)}</textarea>
+                </div>
+              `).join('') || '<div class="summ-note">Nenhum capítulo ainda — vai sendo criado conforme você resume trechos antigos, ou adiciona um manualmente.</div>'}
+              <button id="btnAddChapter" style="width:100%;">＋ Adicionar capítulo manual</button>
             </div>
-            <button id="btnSummarize" style="width:100%" ${state.ui.generating?'disabled':''}>🧠 Resumir início automaticamente</button>
-            <div class="summ-note">Comprime as falas mais antigas num resumo e as arquiva (elas continuam visíveis no histórico, só saem do contexto ativo).</div>
+            <button id="btnSummarize" style="width:100%" ${state.ui.summarizing?'disabled':''}>${state.ui.summarizing ? '🧠 Resumindo…' : '🧠 Resumir início automaticamente'}</button>
+            <div class="summ-note">Comprime as falas mais antigas num novo capítulo e as arquiva (elas continuam visíveis no histórico, só saem do contexto ativo).</div>
             ${state.ui.statusMsg ? `<div class="summ-note ${state.ui.statusErr ? 'err' : ''}" style="margin-top:6px;">${esc(state.ui.statusMsg)}</div>` : ''}
           </div>
 
@@ -1581,7 +1695,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v20</strong>
+          Versão do app: <strong>v21</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -1666,6 +1780,14 @@
         <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
           Em vez de sempre mandar um número fixo de falas, o app inclui as falas mais recentes que couberem dentro desse orçamento
           (estimativa aproximada). O "teto de falas" é só uma trava de segurança, caso você escreva ações bem curtas.
+        </div>
+        <div class="field">
+          <label>Orçamento de tokens pro bloco de fichas (personagens+locais+grupos)</label>
+          <input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}">
+        </div>
+        <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
+          Fichas marcadas "sempre incluir" nunca são cortadas. Entre as marcadas "só quando citada", as mencionadas mais
+          recentemente têm prioridade — se todas juntas passarem desse orçamento, as menos recentes ficam de fora dessa mensagem.
         </div>
         <div class="field">
           <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (mostra a resposta crua da API)</label>
@@ -1761,7 +1883,16 @@
     const bind = (id, ev, fn) => { const e = $(id); if (e) e.addEventListener(ev, fn); };
     bind('#memWorld','input', e => { state.story.memory.world = e.target.value; scheduleSave(); });
     bind('#memNote','input', e => { state.story.memory.authorNote = e.target.value; scheduleSave(); });
-    bind('#memSummary','input', e => { state.story.memory.summary = e.target.value; scheduleSave(); });
+    bind('#btnAddChapter','click', addChapterManual);
+    bind('#btnNudgeSummarize','click', summarizeOldTurns);
+    bind('#btnNudgeDismiss','click', (e) => {
+      state.ui.nudgeDismissedAt = parseInt(e.target.dataset.dropped) || 0;
+      render();
+    });
+    $$('[data-chapterdel]').forEach(b => b.onclick = () => removeChapter(b.dataset.chapterdel));
+    $$('[data-chapterfield]').forEach(inp => inp.addEventListener('input', e => {
+      updateChapter(e.target.dataset.chapterid2, e.target.dataset.chapterfield, e.target.value);
+    }));
     bind('#memSecrets','input', e => { state.story.memory.secrets = e.target.value; scheduleSave(); });
     bind('#btnSummarize','click', summarizeOldTurns);
     $$('[data-addtype]').forEach(b => b.onclick = () => addCard(b.dataset.addtype));
@@ -1846,6 +1977,7 @@
       c.temperature = parseFloat(g('temperature')) || 0.85;
       c.historyTokenBudget = parseInt(g('historyTokenBudget')) || 3000;
       c.maxHistoryTurns = parseInt(g('maxHistoryTurns')) || 40;
+      c.cardsTokenBudget = parseInt(g('cardsTokenBudget')) || 1200;
       c.debugMode = !!document.getElementById('debugMode').checked;
       await sSet('settings:connector', c);
       state.ui.modal = null;

@@ -601,6 +601,7 @@
       await sSet('settings:lastOpen', s.id);
     }
     render();
+    scrollFeedToBottom();
   }
 
   function normalizeStory(s){
@@ -658,10 +659,18 @@
     return s;
   }
 
+  function scrollFeedToBottom(){
+    setTimeout(() => {
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 40);
+  }
+
   async function loadStory(id){
     const s = await sGet('story:' + id);
     if (s){ state.story = normalizeStory(s); await sSet('settings:lastOpen', id); }
     render();
+    scrollFeedToBottom();
   }
 
   let saveTimer = null;
@@ -1695,7 +1704,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v21</strong>
+          Versão do app: <strong>v22</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

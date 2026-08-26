@@ -526,13 +526,15 @@
 
   function defaultConnector(){
     return {
-      mode: 'horde',            // 'horde' | 'openai' | 'builtin'
+      mode: 'horde',            // 'horde' | 'openai' | 'huggingface' | 'builtin'
       hordeKey: '0000000000',
       hordeNsfw: true,
       hordeModels: '',
       oaEndpoint: '',
       oaKey: '',
       oaModel: '',
+      hfModel: '',
+      hfKey: '',
       maxLength: 550,
       temperature: 0.85,
       historyTokenBudget: 3000,   // orçamento de tokens pro histórico de falas
@@ -1001,6 +1003,56 @@
     throw new Error('Tempo esgotado esperando o AI Horde. Tente novamente em instantes.');
   }
 
+  async function callHuggingFace(messages, attempt){
+    attempt = attempt || 1;
+    const c = activeConnector();
+    if (!c.hfModel) throw new Error('Preencha o ID do modelo do Hugging Face nas Configurações (ex: meta-llama/Llama-3.1-8B-Instruct).');
+    const sys = messages.find(m => m.role === 'system');
+    const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
+    const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
+    const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
+
+    const url = 'https://api-inference.huggingface.co/models/' + c.hfModel.trim();
+    const headers = {'Content-Type':'application/json'};
+    if (c.hfKey) headers['Authorization'] = 'Bearer ' + c.hfKey;
+    const body = {
+      inputs: promptText,
+      parameters: {
+        temperature: c.temperature,
+        max_new_tokens: (c.maxLength || 220) + 40,
+        return_full_text: false
+      }
+    };
+    let res;
+    try{
+      res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body) });
+    }catch(err){
+      recordDebug('huggingface', body, null, err.message + ' — endpoint: ' + url);
+      throw new Error('Falha de rede ao chamar o Hugging Face. Confira o ID do modelo e veja o modo de depuração.');
+    }
+    if (res.status === 503 && attempt < 3){
+      const t = await res.text().catch(()=> '');
+      let waitSecs = 15;
+      try{ const parsed = JSON.parse(t); waitSecs = Math.ceil(parsed.estimated_time || 15); }catch(e){}
+      updateStatus('Modelo ainda "acordando" no Hugging Face — tentando de novo em ' + waitSecs + 's… (tentativa ' + attempt + '/2)', false);
+      render();
+      await new Promise(r => setTimeout(r, waitSecs * 1000));
+      return callHuggingFace(messages, attempt + 1);
+    }
+    if (!res.ok){
+      const t = await res.text().catch(()=> '');
+      recordDebug('huggingface', body, t);
+      throw new Error('Hugging Face respondeu ' + res.status + ': ' + t.slice(0,200));
+    }
+    const data = await res.json();
+    recordDebug('huggingface', body, data);
+    const raw = Array.isArray(data) ? (data[0] && data[0].generated_text) : (data.generated_text || (data.error ? null : ''));
+    if (data.error) throw new Error('Hugging Face: ' + data.error);
+    if (!raw) throw new Error('Resposta do Hugging Face veio sem texto (veja o modo de depuração).');
+    const clean = stripEcho(promptText, raw);
+    return { text: clean || raw.trim(), meta: null };
+  }
+
   async function callBuiltinClaude(messages){
     const sys = messages.find(m => m.role === 'system');
     const rest = messages.filter(m => m.role !== 'system').map(m => ({
@@ -1040,6 +1092,7 @@
     const conn = activeConnector();
     let result;
     if (conn.mode === 'horde') result = await callAiHorde(messages);
+    else if (conn.mode === 'huggingface') result = await callHuggingFace(messages);
     else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
     else result = await callOpenAICompatible(messages);
     if (result.meta){
@@ -1245,6 +1298,7 @@
       const conn = activeConnector();
       let result;
       if (conn.mode === 'horde') result = await callAiHorde(messages);
+      else if (conn.mode === 'huggingface') result = await callHuggingFace(messages);
       else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
       else result = await callOpenAICompatible(messages);
       s.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (s.memory.chapters.length + 1), text: result.text.trim() });
@@ -1704,7 +1758,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v22</strong>
+          Versão do app: <strong>v23</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -1712,6 +1766,7 @@
           <select id="connMode">
             <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, comunitário, aceita NSFW)</option>
             <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI (OpenRouter, Ollama, etc.)</option>
+            <option value="huggingface" ${c.mode==='huggingface'?'selected':''}>Hugging Face (Inference API clássica)</option>
             <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (só pra testar — sem NSFW)</option>
           </select>
         </div>
@@ -1762,6 +1817,23 @@
             Funciona com qualquer serviço que fale o formato de "chat completions" da OpenAI: OpenRouter (tem opções gratuitas),
             Ollama local (endpoint tipo http://localhost:11434/v1/chat/completions), text-generation-webui, etc.
             <br><br>Mesma observação: se der "falha de rede", abra o arquivo .html baixado direto no navegador, fora do Claude.ai.
+          </div>
+        ` : ''}
+        ${c.mode === 'huggingface' ? `
+          <div class="field">
+            <label>ID do modelo no Hugging Face</label>
+            <input type="text" id="hfModel" value="${esc(c.hfModel)}" placeholder="ex: meta-llama/Llama-3.1-8B-Instruct">
+          </div>
+          <div class="field">
+            <label>Token de API</label>
+            <input type="text" id="hfKey" value="${esc(c.hfKey)}" placeholder="hf_...">
+          </div>
+          <div class="helpbox">
+            Gere um token grátis em <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co/settings/tokens</a>.
+            Esse é o endpoint "clássico" (api-inference.huggingface.co) — usa um formato de texto único, diferente do chat da OpenAI,
+            então essa opção fala com ele do jeito certo. Se o modelo estiver "dormindo", a primeira chamada pode demorar
+            (o app tenta de novo sozinho). Nem todo modelo do Hugging Face fica disponível por essa API gratuita.
+            <br><br>Se der "falha de rede", abra o arquivo .html baixado direto no navegador, fora do Claude.ai.
           </div>
         ` : ''}
 
@@ -1981,6 +2053,9 @@
         c.oaEndpoint = g('oaEndpoint') || '';
         c.oaKey = g('oaKey') || '';
         c.oaModel = g('oaModel') || '';
+      } else if (c.mode === 'huggingface'){
+        c.hfModel = g('hfModel') || '';
+        c.hfKey = g('hfKey') || '';
       }
       c.maxLength = parseInt(g('maxLength')) || 220;
       c.temperature = parseFloat(g('temperature')) || 0.85;

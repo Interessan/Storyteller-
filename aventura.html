@@ -1012,7 +1012,11 @@
     const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
-    const url = 'https://api-inference.huggingface.co/models/' + c.hfModel.trim();
+    // aceita tanto "org/modelo" quanto se a pessoa colar a URL inteira por engano — em ambos os casos, chega no endereço certo
+    let modelId = c.hfModel.trim();
+    modelId = modelId.replace(/^https?:\/\/api-inference\.huggingface\.co\/models\//i, '');
+    modelId = modelId.replace(/^https?:\/\/huggingface\.co\/models\//i, '').replace(/^https?:\/\/huggingface\.co\//i, '');
+    const url = 'https://api-inference.huggingface.co/models/' + modelId;
     const headers = {'Content-Type':'application/json'};
     if (c.hfKey) headers['Authorization'] = 'Bearer ' + c.hfKey;
     const body = {
@@ -1758,7 +1762,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v23</strong>
+          Versão do app: <strong>v24</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -1823,6 +1827,10 @@
           <div class="field">
             <label>ID do modelo no Hugging Face</label>
             <input type="text" id="hfModel" value="${esc(c.hfModel)}" placeholder="ex: meta-llama/Llama-3.1-8B-Instruct">
+          </div>
+          <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
+            Só o "org/nome-do-modelo" (o que aparece depois de huggingface.co/ na página do modelo) — sem o
+            "https://api-inference.huggingface.co/models/" na frente, o app já adiciona isso sozinho.
           </div>
           <div class="field">
             <label>Token de API</label>

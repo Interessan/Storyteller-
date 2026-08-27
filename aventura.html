@@ -829,7 +829,11 @@
       liveTurns, haystackLower, conn.cardsTokenBudget || 1200
     );
 
-    const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você" ou na terceira pessoa (nunca "ele faz", "ela vê" pro protagonista); os outros personagens continuam normalmente em terceira pessoa ("ele diz", "ela sorri"), só o protagonista é sempre "eu".';
+    const protagCard = (s.memory.characters || []).find(c => c.isProtagonist);
+    const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
+    const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você" ou na terceira pessoa (nunca "ele faz", "ela vê" pro protagonista' + (protagName ? (', nunca "' + protagName + ' faz" ou "' + protagName + ' vê"') : '') + '); os outros personagens continuam normalmente em terceira pessoa ("ele diz", "ela sorri"), só o protagonista é sempre "eu".'
+      + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela NUNCA aparece como sujeito narrando a própria ação — troque sempre por "eu": errado "' + protagName + ' sorri e diz", certo "eu sorrio e digo".') : '')
+      + ' Exemplo do jeito ERRADO (nunca faça isso): "Você entra na sala e vê o General."' + (protagName ? (' / "' + protagName + ' entra na sala e vê o General."') : '') + ' Exemplo do jeito CERTO: "Eu entro na sala e vejo o General."';
     const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos, ênfase ou qualquer outra coisa — nada de "*ele sorri*" ou "**ele sorri**", escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão, sem asteriscos ao redor.';
     const sys = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
@@ -1733,7 +1737,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v25</strong>
+          Versão do app: <strong>v26</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

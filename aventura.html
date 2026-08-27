@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Aventura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Literata:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<style>
+  :root{
+    --ink: #14161d;
+    --panel: #1b1e28;
+    --panel-2: #21242f;
+    --border: rgba(255,255,255,0.08);
+    --muted: #9a9fb0;
+    --amber: #d59a44;
+    --amber-dim: #a97a3a;
+    --rust: #b5502f;
+    --parchment: #efe6d3;
+    --parchment-ink: #2b2420;
+    --parchment-2: #e6dabf;
+  }
+  *{box-sizing:border-box;}
+  body,html{margin:0;padding:0; overflow-x:hidden; height:100%;}
+  input, textarea, select{ max-width:100%; min-width:0; }
+  #app{
+    font-family:'Literata', serif;
+    background: var(--ink);
+    color: #e9e6de;
+    height:100vh;
+    height:100dvh;
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  .display{font-family:'Fraunces', serif;}
+
+  /* header */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px;
+    border-bottom:1px solid var(--border);
+    background: linear-gradient(180deg, #181a22, #14161d);
+    position:sticky; top:0; z-index:20;
+  }
+  header .titlewrap{display:flex; align-items:baseline; gap:10px; min-width:0;}
+  header h1{
+    font-family:'Fraunces', serif; font-weight:700; font-size:19px; margin:0;
+    color:#f1ead8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  header .tag{font-family:'JetBrains Mono'; font-size:10px; color:var(--amber); letter-spacing:.08em; text-transform:uppercase;}
+  header .btns{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; row-gap:4px;}
+  button{
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    background: var(--panel-2); color:#e9e6de; border:1px solid var(--border);
+    padding:8px 12px; border-radius:6px; cursor:pointer; letter-spacing:.02em;
+    transition: border-color .15s, background .15s;
+  }
+  button:hover{ border-color: var(--amber-dim); }
+  button:focus-visible{ outline:2px solid var(--amber); outline-offset:1px; }
+  button.primary{ background: var(--amber); color:#221806; border-color:var(--amber); font-weight:600; }
+  button.primary:hover{ background:#e3a851; }
+  button.danger{ color:#f0b7a4; border-color: var(--rust); }
+  button.ghost{ background:transparent; }
+  button:disabled{ opacity:.5; cursor:default; }
+  button.icon{ padding:8px 9px; }
+
+  /* layout */
+  .layout{
+    display:grid;
+    grid-template-columns: 1fr 46px;
+    flex:1;
+    min-height:0;
+    max-width:1500px;
+    width:100%;
+    margin:0 auto;
+  }
+  @media (max-width: 880px){
+    .layout{ grid-template-columns: 1fr; max-width:none; }
+    .spine{ display:none; }
+  }
+  /* alternância manual celular/PC, sobrepõe a media query acima */
+  #app.force-mobile .layout{ grid-template-columns: 1fr !important; max-width:none !important; }
+  #app.force-mobile .spine{ display:none !important; }
+  #app.force-mobile .page{ max-width:100% !important; }
+  #app.force-desktop .layout{ grid-template-columns: 1fr 46px !important; max-width:1500px !important; }
+  #app.force-desktop .spine{ display:flex !important; }
+  .layout-toggle{ font-size:10px !important; padding:6px 9px !important; }
+
+  /* memory panel — agora é uma gaveta que desliza, não faz parte do grid */
+  .layout > *{ min-width:0; }
+  .drawer-backdrop{
+    position:fixed; inset:0; background:rgba(8,9,13,.55); z-index:40;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .drawer-backdrop.open{ opacity:1; pointer-events:auto; }
+  .memory-panel{
+    position:fixed; top:0; left:0; height:100vh; width:340px; max-width:88vw;
+    background: var(--panel);
+    border-right:1px solid var(--border);
+    padding:16px;
+    overflow-y:auto;
+    overflow-x:hidden;
+    display:flex; flex-direction:column; gap:14px;
+    z-index:41;
+    transform:translateX(-100%);
+    transition:transform .22s ease;
+    box-shadow: 6px 0 28px rgba(0,0,0,.35);
+  }
+  .memory-panel.open{ transform:translateX(0); }
+  .memory-panel-close{ align-self:flex-end; }
+  .memory-panel h2{ font-family:'Fraunces'; font-size:13.5px; color:var(--amber); text-transform:uppercase; letter-spacing:.08em; margin:0 0 6px; cursor:pointer; display:flex; align-items:center; gap:6px; user-select:none; }
+  .memory-panel h2 .chevron{ font-size:11px; opacity:.7; }
+  .field label{ display:block; font-family:'JetBrains Mono'; font-size:11px; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.05em;}
+  .field textarea, .field input[type=text]{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+    color:#e9e6de; font-family:'Literata'; font-size:14.5px; line-height:1.5; padding:10px 11px; resize:vertical;
+  }
+  .field textarea{ min-height:110px; }
+  .field textarea:focus, .field input:focus{ outline:none; border-color: var(--amber-dim); }
+  .field{ margin-bottom:12px; }
+  .pov-toggle{ display:flex; gap:6px; }
+  .pov-toggle button{ flex:1; }
+  .pov-toggle button.active{ background:var(--amber); color:#221806; border-color:var(--amber); }
+  .summ-note{ font-size:11px; color:var(--muted); line-height:1.5; }
+  .nudge-banner{
+    background:rgba(213,154,68,0.1); border:1px solid rgba(213,154,68,0.35); border-radius:7px;
+    padding:9px 10px; font-size:11.5px; color:#f0dcb0; line-height:1.5; margin-bottom:8px;
+  }
+  .nudge-banner button{ font-size:11px; padding:6px 10px; }
+  .summ-note.err{ color:#f0b7a4; }
+
+  /* main / feed */
+  main{ display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .feed{
+    flex:1; overflow-y:auto; padding:22px 24px 30px;
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(213,154,68,0.06), transparent 60%),
+      var(--ink);
+  }
+  .page{
+    max-width:720px; margin:0 auto; background:var(--parchment); color:var(--parchment-ink);
+    border-radius:10px; padding:26px 30px; font-size:15.5px; line-height:1.75;
+    box-shadow: 0 1px 0 rgba(0,0,0,.2), inset 0 0 0 1px rgba(0,0,0,.04);
+    white-space: pre-wrap;
+  }
+  .turn{ position:relative; display:inline; }
+  .turn.user{ font-style:italic; color:#5a4a30; }
+  .turn.ai{ cursor:pointer; }
+  .turn.user{ cursor:pointer; }
+  .turn.archived{ opacity:.4; }
+  .turn.active-menu{ background:rgba(213,154,68,0.14); border-radius:3px; box-shadow:0 0 0 2px rgba(213,154,68,0.14); }
+  .turn-sep{ display:block; height:0.6em; }
+  .turn .actions{
+    display:inline-flex; gap:5px; margin-left:6px; vertical-align:middle; cursor:default;
+  }
+  .turn .actions.actions-open{
+    background:rgba(43,36,32,0.08); border-radius:6px; padding:3px 5px;
+  }
+  .turn .actions button{
+    padding:3px 7px; font-size:10px; background:rgba(43,36,32,0.08); color:var(--parchment-ink);
+    border:1px solid rgba(43,36,32,0.18); border-radius:4px; white-space:nowrap; cursor:pointer;
+  }
+  .turn .actions button:hover{ background:rgba(43,36,32,0.16); }
+  .turn-editbox{
+    display:block; width:100%; background:rgba(43,36,32,0.05); border:1px solid rgba(43,36,32,0.2); border-radius:6px;
+    color:var(--parchment-ink); font-family:'Literata'; font-size:15.5px; line-height:1.7; padding:8px 10px;
+    resize:vertical; margin:6px 0; min-height:60px; overflow:hidden;
+  }
+  .turn-editbox:focus{ outline:none; border-color: var(--amber-dim); }
+  .empty-state{ max-width:520px; margin:60px auto; text-align:center; color:var(--muted); }
+  .empty-state h2{ font-family:'Fraunces'; color:#f1ead8; font-weight:600; }
+
+  .composer{
+    border-top:1px solid var(--border); padding:14px 24px; background:#171922;
+  }
+  .composer-inner{ max-width:720px; margin:0 auto; }
+  .composer textarea{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    color:#e9e6de; font-family:'Literata'; font-size:14.5px; padding:11px 12px; resize:none;
+    min-height:52px;
+  }
+  .composer textarea:focus{ outline:none; border-color:var(--amber-dim); }
+  .composer-row{ display:flex; gap:8px; margin-top:8px; align-items:center; }
+  .token-estimate{ font-size:10px; color:var(--muted); margin-top:4px; opacity:.75; }
+  .dungeon-bar{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:9px; }
+  .dungeon-bar button{ padding:9px 13px; font-size:11.5px; white-space:nowrap; }
+  .dungeon-bar-secondary{ margin-top:6px; }
+  .dungeon-bar-secondary button{ padding:6px 11px; font-size:10.5px; opacity:.8; }
+  .retry-group{
+    display:flex; align-items:center; gap:0;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+  }
+  .retry-group button{ border:none; border-radius:0; background:transparent; white-space:nowrap; }
+  .retry-group button:not(:last-child){ border-right:1px solid var(--border); }
+  .retry-nav{ padding:9px 10px !important; }
+  .retry-count{ padding:0 8px; font-size:10.5px; color:var(--muted); white-space:nowrap; }
+  .dungeon-bar-main{ display:flex; gap:7px; }
+  .dungeon-bar-main > button{ flex:1 1 0; }
+  .dungeon-bar-main > .retry-group{ flex:1.4 1 0; justify-content:center; }
+  .dungeon-bar-secondary button{ flex:0 0 auto; }
+  @media (max-width: 480px){
+    .dungeon-bar button{ padding:10px 8px; font-size:11px; }
+    .retry-group{ display:flex; }
+    .retry-group button{ flex:1 1 auto; padding-left:6px !important; padding-right:6px !important; }
+    .dungeon-bar-secondary{ flex-wrap:wrap; }
+    .dungeon-bar-secondary button{ font-size:10px; padding:6px 9px; }
+  }
+  .composer-row .spacer{ flex:1; }
+  .status{ font-family:'JetBrains Mono'; font-size:11px; color:var(--muted); }
+  .status.err{ color:#f0b7a4; }
+  .save-warning{ font-family:'JetBrains Mono'; font-size:10.5px; color:#f0b7a4; margin-right:6px; }
+
+  /* spine */
+  .spine{
+    background:var(--panel); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 0; overflow-y:auto;
+  }
+  .spine .tab{
+    width:28px; height:20px; border-radius:4px; background:var(--panel-2); border:1px solid var(--border);
+    color:var(--muted); font-family:'JetBrains Mono'; font-size:9px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex-shrink:0;
+  }
+  .spine .tab.ai{ border-color: rgba(213,154,68,.35); }
+  .spine .tab.current{ background:var(--amber); color:#221806; border-color:var(--amber); font-weight:700; }
+  .spine .tab:hover{ border-color:var(--amber); }
+
+  /* modal */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,10,14,.65); backdrop-filter: blur(2px);
+    display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;
+  }
+  .modal{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    max-width:560px; width:100%; max-height:85vh; overflow-y:auto; padding:22px;
+  }
+  .modal h2{ font-family:'Fraunces'; margin-top:0; color:#f1ead8; }
+  .modal .close{ float:right; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .story-item{
+    display:flex; align-items:center; gap:10px; padding:10px; border:1px solid var(--border);
+    border-radius:7px; margin-bottom:8px; background:var(--panel-2);
+  }
+  .story-item .info{ flex:1; min-width:0; }
+  .story-item .info .t{ font-family:'Fraunces'; font-size:14px; color:#f1ead8; }
+  .story-item .info .d{ font-family:'JetBrains Mono'; font-size:10px; color:var(--muted); }
+  .helpbox{ font-size:12px; color:var(--muted); line-height:1.6; background:var(--panel-2); border-radius:7px; padding:10px 12px; margin-top:6px; }
+  .helpbox a{ color:var(--amber); }
+  select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+    color:#e9e6de; font-family:'JetBrains Mono'; font-size:12px; padding:8px 9px;
+  }
+  .divider{ height:1px; background:var(--border); margin:16px 0; }
+  .char-card{ background:var(--panel-2); border:1px solid var(--border); border-radius:7px; padding:9px; margin-bottom:8px; }
+  .char-card input[type=text]{ background:var(--ink); border:1px solid var(--border); border-radius:5px; color:#e9e6de; font-family:'Fraunces'; font-size:14.5px; padding:9px 10px; }
+  .char-card textarea{ background:var(--ink); border:1px solid var(--border); border-radius:5px; color:#e9e6de; font-family:'Literata'; font-size:14px; line-height:1.5; padding:9px 10px; width:100%; resize:vertical; margin-top:6px; min-height:90px; }
+  .ccard-top{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .ccard-top{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .ccard-toggle{ padding:4px 7px; font-size:11px; flex-shrink:0; }
+  .ccard-row2{ display:grid; grid-template-columns: 70px 1fr; gap:6px; margin-bottom:6px; }
+  .ccard-row2 input{ width:100%; min-width:0; background:var(--ink); border:1px solid var(--border); border-radius:5px; color:#e9e6de; font-family:'JetBrains Mono'; font-size:13px; padding:9px 9px; }
+  .protag-badge{ font-family:'JetBrains Mono'; font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:#221806; background:var(--amber); padding:2px 6px; border-radius:4px; flex-shrink:0; }
+  .protag-check{ display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono'; font-size:10.5px; color:var(--amber); text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+
+  // ---------- armazenamento: nativo (Claude) | Google Drive | local ----------
+  function backend(){
+    if (state.drive && state.drive.signedIn) return 'drive';
+    if (typeof window.storage !== 'undefined' && window.storage) return 'native';
+    return 'local';
+  }
+
+  async function sGet(key){
+    const b = backend();
+    if (b === 'native'){
+      try{ const r = await window.storage.get(key, false); return r ? JSON.parse(r.value) : null; }
+      catch(e){ return null; }
+    }
+    if (b === 'drive'){
+      await ensureDriveLoaded();
+      return (key in state.drive.store) ? state.drive.store[key] : null;
+    }
+    try{
+      const raw = localStorage.getItem('aventura:' + key);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+
+  async function sSet(key, val, attempt){
+    const b = backend();
+    attempt = attempt || 0;
+    if (b === 'native'){
+      try{
+        await window.storage.set(key, JSON.stringify(val), false);
+        return true;
+      }catch(e){
+        if (attempt < 2){
+          await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+          return sSet(key, val, attempt + 1);
+        }
+        console.error('storage set failed after retries', e);
+        return false;
+      }
+    }
+    if (b === 'drive'){
+      await ensureDriveLoaded();
+      state.drive.store[key] = val;
+      scheduleDriveUpload();
+      return true;
+    }
+    try{ localStorage.setItem('aventura:' + key, JSON.stringify(val)); return true; }
+    catch(e){ console.error('localStorage set failed', e); return false; }
+  }
+
+  async function sDelete(key){
+    const b = backend();
+    if (b === 'native'){ try{ await window.storage.delete(key, false); }catch(e){} return; }
+    if (b === 'drive'){ await ensureDriveLoaded(); delete state.drive.store[key]; scheduleDriveUpload(); return; }
+    try{ localStorage.removeItem('aventura:' + key); }catch(e){}
+  }
+
+  // ---------- Google Drive (appDataFolder) ----------
+  function loadSavedClientId(){
+    try{ return localStorage.getItem('aventura:googleClientId') || ''; }catch(e){ return ''; }
+  }
+  function saveClientId(id){
+    try{ localStorage.setItem('aventura:googleClientId', id); }catch(e){}
+  }
+
+  async function driveFetch(url, opts){
+    opts = opts || {};
+    opts.headers = Object.assign({ 'Authorization': 'Bearer ' + state.drive.token }, opts.headers || {});
+    const res = await fetch(url, opts);
+    if (res.status === 401){
+      state.drive.signedIn = false;
+      state.drive.loaded = false;
+      updateStatus('Sua sessão do Google expirou — clique em "Entrar com Google" de novo nas Configurações.', true);
+      render();
+      throw new Error('Sessão do Google expirada.');
+    }
+    return res;
+  }
+
+  async function driveFindFile(){
+    const q = encodeURIComponent("name='aventura-store.json'");
+    const res = await driveFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=' + q + '&fields=files(id,name)');
+    if (!res.ok) throw new Error('Falha ao procurar dados no Drive (' + res.status + ')');
+    const data = await res.json();
+    return (data.files && data.files[0]) ? data.files[0].id : null;
+  }
+
+  async function driveCreateFile(initialContent){
+    const boundary = 'aventura_boundary_' + uid();
+    const metadata = { name: 'aventura-store.json', parents: ['appDataFolder'] };
+    const body =
+      '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+      '--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + JSON.stringify(initialContent) + '\r\n' +
+      '--' + boundary + '--';
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method:'POST',
+      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body
+    });
+    if (!res.ok) throw new Error('Falha ao criar dados no Drive (' + res.status + ')');
+    const data = await res.json();
+    return data.id;
+  }
+
+  async function driveReadFile(fileId){
+    const res = await driveFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
+    if (!res.ok) throw new Error('Falha ao ler dados do Drive (' + res.status + ')');
+    const text = await res.text();
+    try{ return text ? JSON.parse(text) : {}; }catch(e){ return {}; }
+  }
+
+  async function driveWriteFile(fileId, content){
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
+      method:'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(content)
+    });
+    if (!res.ok) throw new Error('Falha ao salvar no Drive (' + res.status + ')');
+  }
+
+  let driveLoadingPromise = null;
+  async function ensureDriveLoaded(){
+    if (state.drive.loaded) return;
+    if (driveLoadingPromise) return driveLoadingPromise;
+    driveLoadingPromise = (async () => {
+      let fileId = await driveFindFile();
+      if (!fileId){
+        fileId = await driveCreateFile({});
+        state.drive.store = {};
+      } else {
+        state.drive.store = await driveReadFile(fileId);
+      }
+      state.drive.fileId = fileId;
+      state.drive.loaded = true;
+    })();
+    try{ await driveLoadingPromise; } finally { driveLoadingPromise = null; }
+  }
+
+  let driveUploadTimer = null;
+  function scheduleDriveUpload(){
+    clearTimeout(driveUploadTimer);
+    driveUploadTimer = setTimeout(async () => {
+      try{ await driveWriteFile(state.drive.fileId, state.drive.store); }
+      catch(e){ console.error('drive upload failed', e); showSaveWarning(); }
+    }, 500);
+  }
+
+  function initGoogleTokenClient(){
+    if (!state.drive.clientId || typeof google === 'undefined' || !google.accounts) return;
+    state.drive.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: state.drive.clientId,
+      scope: 'https://www.googleapis.com/auth/drive.appdata',
+      callback: async (resp) => {
+        if (resp.error){
+          if (!state.drive.signedIn) return; // falha numa tentativa silenciosa — não incomoda o usuário
+          updateStatus('Erro ao entrar com Google: ' + resp.error, true); render(); return;
+        }
+        state.drive.token = resp.access_token;
+        state.drive.tokenExpiry = Date.now() + (resp.expires_in || 3500) * 1000;
+        state.drive.signedIn = true;
+        state.drive.loaded = false;
+        try{ localStorage.setItem('aventura:driveWasSignedIn', '1'); }catch(e){}
+        updateStatus('Conectando ao Google Drive…', false);
+        render();
+        try{
+          await ensureDriveLoaded();
+          await init();
+          updateStatus('Conectado ao Google Drive ✓ — os dados agora sincronizam por essa conta.', false);
+        }catch(err){
+          updateStatus('Erro ao carregar dados do Drive: ' + err.message, true);
+        }
+        render();
+      }
+    });
+  }
+
+  function signInWithGoogle(){
+    const idInput = document.getElementById('googleClientId');
+    const clientId = (idInput ? idInput.value.trim() : state.drive.clientId);
+    if (!clientId){ updateStatus('Cole o Client ID do Google antes de entrar.', true); render(); return; }
+    state.drive.clientId = clientId;
+    saveClientId(clientId);
+    if (!state.drive.tokenClient) initGoogleTokenClient();
+    if (state.drive.tokenClient) state.drive.tokenClient.requestAccessToken();
+    else updateStatus('A biblioteca do Google ainda não carregou — espera um segundo e tenta de novo.', true);
+    render();
+  }
+
+  async function signOutGoogle(){
+    state.drive.signedIn = false;
+    state.drive.token = null;
+    state.drive.loaded = false;
+    state.drive.store = {};
+    try{ localStorage.removeItem('aventura:driveWasSignedIn'); }catch(e){}
+    await init();
+    render();
+  }
+
+  // tenta reconectar sozinho, sem popup, se essa conta já entrou antes nesse navegador
+  function attemptSilentGoogleSignIn(){
+    let wasSignedIn = false;
+    try{ wasSignedIn = localStorage.getItem('aventura:driveWasSignedIn') === '1'; }catch(e){}
+    if (!wasSignedIn || !state.drive.clientId) return;
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries++;
+      if (typeof google !== 'undefined' && google.accounts){
+        clearInterval(poll);
+        initGoogleTokenClient();
+        if (state.drive.tokenClient){
+          try{ state.drive.tokenClient.requestAccessToken({ prompt: '' }); }catch(e){}
+        }
+      } else if (tries > 20){
+        clearInterval(poll);
+      }
+    }, 250);
+  }
+
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+  // ---------- state ----------
+  let state = {
+    index: [],           // [{id,title,updatedAt}]
+    story: null,          // current loaded story object
+    connector: null,       // global default connector settings
+    drive: {
+      clientId: loadSavedClientId(),
+      tokenClient: null,
+      token: null,
+      tokenExpiry: 0,
+      signedIn: false,
+      fileId: null,
+      store: {},
+      loaded: false
+    },
+    ui: {
+      modal: null,         // null | 'settings' | 'stories'
+      generating: false,
+      statusMsg: '',
+      statusErr: false,
+      composerText: '',
+      collapsed: new Set(),   // chaves tipo 'char:ID', 'loc:ID', 'group:ID'
+      memoryPanelOpen: false,
+      lastDebug: null,
+      forcedLayout: (function(){ try{ return localStorage.getItem('aventura:forcedLayout') || 'auto'; }catch(e){ return 'auto'; } })(),
+      openActionsFor: null,
+      summarizing: false,
+      nudgeDismissedAt: 0
+    }
+  };
+
+  function defaultConnector(){
+    return {
+      mode: 'horde',            // 'horde' | 'openai' | 'builtin'
+      hordeKey: '0000000000',
+      hordeNsfw: true,
+      hordeModels: '',
+      oaEndpoint: '',
+      oaKey: '',
+      oaModel: '',
+      maxLength: 550,
+      temperature: 0.85,
+      historyTokenBudget: 3000,   // orçamento de tokens pro histórico de falas
+      maxHistoryTurns: 40,        // teto de segurança (nº de falas), mesmo que o orçamento permitisse mais
+      cardsTokenBudget: 1200,     // orçamento de tokens pro bloco de fichas (personagens/locais/grupos) combinado
+      debugMode: false
+    };
+  }
+
+  // estimativa simples (sem tokenizer real): ~4 caracteres por token, aproximação padrão usada em ferramentas client-side
+  function estimateTokens(str){
+    return Math.ceil((str || '').length / 4);
+  }
+
+  // seleciona as falas mais recentes que couberem dentro do orçamento de tokens, sempre incluindo ao menos a última
+  function selectTurnsByBudget(turns, budgetTokens, maxCount){
+    const selected = [];
+    let total = 0;
+    for (let i = turns.length - 1; i >= 0 && selected.length < maxCount; i--){
+      const t = turns[i];
+      const cost = estimateTokens(t.text);
+      if (selected.length > 0 && total + cost > budgetTokens) break;
+      selected.unshift(t);
+      total += cost;
+    }
+    return selected;
+  }
+
+  function newStory(title){
+    return {
+      id: uid(),
+      title: title || 'Nova aventura',
+      pov: 'first',              // 'first' | 'second'
+      memory: {
+        persona: '',
+        world: '',
+        authorNote: '',
+        summary: '',
+        characters: [],   // {id, name, age, appearance, personality, desc, knows, origin, relations, isProtagonist}
+        locations: [],    // {id, name, origin, desc, notes}
+        groups: [],       // {id, name, members, dynamic}
+        secrets: ''
+      },
+      turns: [],                  // {id, type:'user'|'ai', text, archived}
+      connector: null,            // per-story override; null = use global
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  }
+
+  // ---------- init ----------
+  async function init(){
+    state.index = (await sGet('stories:index')) || [];
+    state.connector = Object.assign(defaultConnector(), (await sGet('settings:connector')) || {});
+    const lastId = await sGet('settings:lastOpen');
+    if (lastId && state.index.find(s => s.id === lastId)){
+      await loadStory(lastId);
+    } else if (state.index.length){
+      await loadStory(state.index[0].id);
+    } else {
+      const s = newStory('Minha primeira aventura');
+      state.story = s;
+      state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
+      await sSet('story:' + s.id, s);
+      await sSet('stories:index', state.index);
+      await sSet('settings:lastOpen', s.id);
+    }
+    render();
+    scrollFeedToBottom();
+  }
+
+  function normalizeStory(s){
+    if (!s.memory) s.memory = {};
+    if (!s.memory.characters) s.memory.characters = [];
+    if (!s.memory.locations) s.memory.locations = [];
+    if (!s.memory.groups) s.memory.groups = [];
+    if (typeof s.memory.secrets !== 'string') s.memory.secrets = '';
+    if (typeof s.memory.persona !== 'string') s.memory.persona = '';
+    if (typeof s.memory.world !== 'string') s.memory.world = '';
+    if (typeof s.memory.authorNote !== 'string') s.memory.authorNote = '';
+    if (typeof s.memory.summary !== 'string') s.memory.summary = '';
+    if (!s.memory.chapters) s.memory.chapters = [];
+    // migra o resumo único antigo pra virar o primeiro capítulo, uma única vez
+    if (!s.migratedChapters){
+      if (s.memory.summary && !s.memory.chapters.length){
+        s.memory.chapters.push({ id: uid(), title: 'Capítulo 1', text: s.memory.summary });
+      }
+      s.migratedChapters = true;
+    }
+    // completa campos novos em fichas antigas
+    s.memory.characters.forEach(c => {
+      if (typeof c.age !== 'string') c.age = '';
+      if (typeof c.appearance !== 'string') c.appearance = '';
+      if (typeof c.personality !== 'string') c.personality = '';
+      if (typeof c.isProtagonist !== 'boolean') c.isProtagonist = false;
+      if (typeof c.desc !== 'string') c.desc = '';
+      if (typeof c.knows !== 'string') c.knows = '';
+      if (typeof c.origin !== 'string') c.origin = '';
+      if (typeof c.relations !== 'string') c.relations = '';
+      if (typeof c.alwaysOn !== 'boolean') c.alwaysOn = true;
+      if (typeof c.keywords !== 'string') c.keywords = '';
+    });
+    s.memory.locations.forEach(l => {
+      if (typeof l.origin !== 'string') l.origin = '';
+      if (typeof l.desc !== 'string') l.desc = '';
+      if (typeof l.notes !== 'string') l.notes = '';
+      if (typeof l.alwaysOn !== 'boolean') l.alwaysOn = true;
+      if (typeof l.keywords !== 'string') l.keywords = '';
+    });
+    s.memory.groups.forEach(g => {
+      if (typeof g.members !== 'string') g.members = '';
+      if (typeof g.dynamic !== 'string') g.dynamic = '';
+      if (typeof g.alwaysOn !== 'boolean') g.alwaysOn = true;
+      if (typeof g.keywords !== 'string') g.keywords = '';
+    });
+    // migra o antigo campo "persona" livre pra uma ficha de protagonista, uma única vez
+    if (!s.migratedPersona && s.memory.persona && !s.memory.characters.some(c => c.isProtagonist)){
+      s.memory.characters.unshift({
+        id: uid(), name:'Protagonista', age:'', appearance:'', personality:'',
+        desc: s.memory.persona, knows:'', isProtagonist:true
+      });
+    }
+    s.migratedPersona = true;
+    return s;
+  }
+
+  function scrollFeedToBottom(){
+    setTimeout(() => {
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 40);
+  }
+
+  async function loadStory(id){
+    const s = await sGet('story:' + id);
+    if (s){ state.story = normalizeStory(s); await sSet('settings:lastOpen', id); }
+    render();
+    scrollFeedToBottom();
+  }
+
+  let saveTimer = null;
+  let saveIndicatorTimer = null;
+  function scheduleSave(){
+    if (!state.story) return;
+    state.story.updatedAt = Date.now();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const ok = await sSet('story:' + state.story.id, state.story);
+      const idx = state.index.find(x => x.id === state.story.id);
+      if (idx){ idx.title = state.story.title; idx.updatedAt = state.story.updatedAt; }
+      const ok2 = await sSet('stories:index', state.index);
+      if (!ok || !ok2){
+        showSaveWarning();
+      }
+    }, 350);
+  }
+
+  function showSaveWarning(){
+    state.ui.saveWarning = true;
+    render();
+    clearTimeout(saveIndicatorTimer);
+    saveIndicatorTimer = setTimeout(() => {
+      state.ui.saveWarning = false;
+      render();
+    }, 6000);
+  }
+
+  // ---------- connector logic ----------
+  function activeConnector(){
+    return (state.story && state.story.connector) ? state.story.connector : state.connector;
+  }
+
+  // verifica se algum "gatilho" (nome + palavras-chave extras) aparece no texto recente
+  function cardTriggerWords(card){
+    const triggers = [];
+    if (card.name) triggers.push(...card.name.split(/\s+/));
+    if (card.keywords) triggers.push(...card.keywords.split(','));
+    return triggers.map(w => w.trim().toLowerCase()).filter(w => w.length >= 3);
+  }
+  function cardMatchesText(card, haystackLower){
+    if (card.alwaysOn !== false) return true; // padrão: sempre inclui (compatível com fichas antigas)
+    return cardTriggerWords(card).some(w => haystackLower.includes(w));
+  }
+  // acha a posição (índice) da fala mais recente onde essa ficha foi citada — usado pra priorizar quem "apareceu" há menos tempo
+  function findLastMentionIndex(card, liveTurns){
+    const words = cardTriggerWords(card);
+    if (!words.length) return -1;
+    for (let i = liveTurns.length - 1; i >= 0; i--){
+      const low = liveTurns[i].text.toLowerCase();
+      if (words.some(w => low.includes(w))) return i;
+    }
+    return -1;
+  }
+  function cardLine(type, c){
+    if (type === 'char'){
+      const tag = c.isProtagonist ? '[PROTAGONISTA] ' : '';
+      const bits = [tag + (c.name || 'Sem nome')];
+      if (c.origin) bits.push('origem: ' + c.origin);
+      if (c.age) bits.push('idade: ' + c.age);
+      if (c.appearance) bits.push('aparência: ' + c.appearance);
+      if (c.personality) bits.push('personalidade: ' + c.personality);
+      if (c.relations) bits.push('relações/família: ' + c.relations);
+      if (c.desc) bits.push('histórico/papel: ' + c.desc);
+      if (c.knows) bits.push('sabe até agora: ' + c.knows);
+      return '- ' + bits.join(' | ');
+    }
+    if (type === 'loc'){
+      const bits = [c.name || 'Sem nome'];
+      if (c.origin) bits.push('origem: ' + c.origin);
+      if (c.desc) bits.push('descrição: ' + c.desc);
+      if (c.notes) bits.push('detalhes importantes: ' + c.notes);
+      return '- ' + bits.join(' | ');
+    }
+    if (type === 'group'){
+      const bits = [c.name || 'Sem nome'];
+      if (c.members) bits.push('membros: ' + c.members);
+      if (c.dynamic) bits.push('dinâmica/relação entre eles: ' + c.dynamic);
+      return '- ' + bits.join(' | ');
+    }
+    return '';
+  }
+  // decide quais fichas entram: as "sempre incluir" nunca são cortadas; entre as citadas por palavra-chave,
+  // prioriza quem foi mencionado mais recentemente, até estourar o orçamento de tokens
+  function selectCardsWithinBudget(characters, locations, groups, liveTurns, haystackLower, budgetTokens){
+    const makeCandidates = (list, type) => (list || []).map(c => ({
+      type, card: c,
+      alwaysOn: c.alwaysOn !== false,
+      matched: cardMatchesText(c, haystackLower),
+      lastMention: findLastMentionIndex(c, liveTurns)
+    })).filter(x => x.alwaysOn || x.matched);
+
+    const all = [
+      ...makeCandidates(characters, 'char'),
+      ...makeCandidates(locations, 'loc'),
+      ...makeCandidates(groups, 'group')
+    ];
+    const mandatory = all.filter(x => x.alwaysOn);
+    const optional = all.filter(x => !x.alwaysOn).sort((a, b) => b.lastMention - a.lastMention);
+
+    const included = new Set(mandatory.map(x => x.card.id));
+    let used = mandatory.reduce((sum, x) => sum + estimateTokens(cardLine(x.type, x.card)), 0);
+    optional.forEach(cand => {
+      const cost = estimateTokens(cardLine(cand.type, cand.card));
+      if (used + cost > budgetTokens) return;
+      used += cost;
+      included.add(cand.card.id);
+    });
+
+    return {
+      chars: (characters || []).filter(c => included.has(c.id)),
+      locs: (locations || []).filter(c => included.has(c.id)),
+      groups: (groups || []).filter(c => included.has(c.id))
+    };
+  }
+
+
+  function buildCharactersBlock(characters){
+    if (!characters || !characters.length) return '';
+    const lines = characters.map(c => cardLine('char', c));
+    return 'FICHAS DE PERSONAGENS (respeite estritamente origem, aparência, personalidade, relações e o que cada um sabe — vale até para o protagonista; em crossovers, não misture regras/poderes de universos diferentes a menos que a história explique isso):\n' + lines.join('\n');
+  }
+
+  function buildLocationsBlock(locations){
+    if (!locations || !locations.length) return '';
+    const lines = locations.map(l => cardLine('loc', l));
+    return 'LOCAIS (mantenha a geografia e detalhes consistentes):\n' + lines.join('\n');
+  }
+
+  function buildGroupsBlock(groups){
+    if (!groups || !groups.length) return '';
+    const lines = groups.map(g => cardLine('group', g));
+    return 'GRUPOS / DINÂMICA FAMILIAR (respeite como esses personagens se tratam e se relacionam entre si):\n' + lines.join('\n');
+  }
+
+  function buildChaptersBlock(chapters){
+    if (!chapters || !chapters.length) return '';
+    const lines = chapters.map((c, i) => '[' + (c.title || ('Capítulo ' + (i + 1))) + '] ' + c.text).filter(l => l.trim());
+    if (!lines.length) return '';
+    return 'RESUMO DOS CAPÍTULOS ANTERIORES (na ordem em que aconteceram):\n' + lines.join('\n\n');
+  }
+
+  function buildPromptMessages(actionText, opts){
+    opts = opts || {};
+    const s = state.story;
+    const conn = activeConnector();
+
+    // primeiro decide quais falas entram (por orçamento de tokens), pra saber o "texto recente" que ativa o lorebook
+    let liveTurns = s.turns.filter(t => !t.archived);
+    if (opts.excludeTurnId) liveTurns = liveTurns.filter(t => t.id !== opts.excludeTurnId);
+    liveTurns = selectTurnsByBudget(liveTurns, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
+    const haystackLower = (liveTurns.map(t => t.text).join(' ') + ' ' + (actionText || '')).toLowerCase();
+    const activeCards = selectCardsWithinBudget(
+      s.memory.characters, s.memory.locations, s.memory.groups,
+      liveTurns, haystackLower, conn.cardsTokenBudget || 1200
+    );
+
+    const protagCard = (s.memory.characters || []).find(c => c.isProtagonist);
+    const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
+    const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você", "ele" ou "ela", nem pelo nome, ao narrar a ação, fala ou percepção dele/dela' + (protagName ? (' (nunca "' + protagName + ' faz", nunca "ela faz"/"ele faz" pra se referir a ' + protagName + ')') : '') + '; os outros personagens continuam normalmente em terceira pessoa (nome, "ele", "ela" — "ele diz", "ela sorri"), só o protagonista é sempre "eu".'
+      + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela e os pronomes "ela"/"ele" NUNCA aparecem como sujeito narrando a própria ação — troque sempre por "eu": errado "' + protagName + ' sorri e diz" ou "ela sorri e diz", certo "eu sorrio e digo".') : '')
+      + ' Exemplos do jeito ERRADO (nunca faça isso): "Você entra na sala e vê o General."' + (protagName ? (' / "' + protagName + ' entra na sala e vê o General." / "Ela aponta para o chão, tentando se acalmar."') : '') + ' Exemplo do jeito CERTO: "Eu entro na sala e vejo o General." / "Eu aponto para o chão, tentando me acalmar."';
+    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos, ênfase ou qualquer outra coisa — nada de "*ele sorri*" ou "**ele sorri**", escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão, sem asteriscos ao redor.';
+    const sys = [
+      'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
+      povLine,
+      formatLine,
+      'Continue a história de forma coerente com tudo que já aconteceu. Escreva cenas vívidas mas não excessivamente longas. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora" — apenas pare no ponto certo pra próxima ação encaixar naturalmente.',
+      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 220) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
+      s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
+      s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
+      buildChaptersBlock(s.memory.chapters),
+      buildCharactersBlock(activeCards.chars),
+      buildLocationsBlock(activeCards.locs),
+      buildGroupsBlock(activeCards.groups),
+      s.memory.secrets ? (
+        'SEGREDOS DO MUNDO (conhecimento do narrador, NÃO do protagonista): ' + s.memory.secrets +
+        '\nRegra importante: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história. Não as revele na narração até que a trama naturalmente leve a essa descoberta.'
+      ) : '',
+      'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores. Nunca faça um personagem (incluindo o protagonista) reagir a uma informação que ele não teve como obter ainda.',
+      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele, mesmo que isso contrarie o que a protagonista (ou o jogador) esperava que acontecesse. Não convenha um personagem a ceder, concordar ou mudar de comportamento só porque seria conveniente pra cena — resistência, teimosia, desconfiança ou indiferença de um personagem são válidas e devem se manter até que algo na história realmente as justifique a mudar.',
+      s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
+      opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
+      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos nem nenhuma marcação — só prosa corrida. Os outros personagens reagem com a PRÓPRIA personalidade, não com o que a protagonista espera deles, e não sabem de nada que não tenham visto ou ouvido de fato. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
+    ].filter(Boolean).join('\n\n');
+
+    const messages = [{role:'system', content: sys}];
+    liveTurns.forEach(t => {
+      messages.push({ role: t.type === 'user' ? 'user' : 'assistant', content: t.text });
+    });
+    // Lembrete curto de POV colado bem na última mensagem (não só no system prompt lá no
+    // início). Em histórias longas, modelos — principalmente os menores/gratuitos — dão mais
+    // peso ao que está perto do ponto de geração do que a uma instrução distante no começo,
+    // mesmo que ela esteja marcada como "system". Repetir aqui evita o drift de POV que
+    // aparece só depois que a história cresce.
+    const povReminder = '[Lembrete: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos. O protagonista nunca é "você", "ele" nem "ela" — mesmo o nome dela nunca aparece como sujeito da própria ação.]';
+    if (opts.isContinue){
+      messages.push({role:'user', content: '(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)\n\n' + povReminder, isContinueMarker:true});
+    } else {
+      messages.push({role:'user', content: actionText + '\n\n' + povReminder});
+    }
+    return {messages, sys, liveTurns};
+  }
+
+  function recordDebug(provider, request, response, error){
+    const c = state.connector;
+    if (!c.debugMode) return;
+    state.ui.lastDebug = {
+      provider, time: new Date().toLocaleTimeString('pt-BR'),
+      request, response: response || null, error: error ? String(error) : null
+    };
+  }
+
+  function stripEcho(promptTail, text){
+    if (!text) return text;
+    let t = text.trim();
+    const tail = (promptTail || '').trim().slice(-80);
+    if (tail && t.startsWith(tail)) t = t.slice(tail.length).trim();
+    // remove common leaked markers some models add
+    t = t.replace(/^(###|>>>|AI:|Narrador:)\s*/i, '').trim();
+    return t;
+  }
+
+  async function callOpenAICompatible(messages, attempt){
+    attempt = attempt || 1;
+    const c = activeConnector();
+    if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
+    if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações (ex: openai/gpt-4o-mini).');
+    const headers = {'Content-Type':'application/json'};
+    if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
+    const reqBody = {
+      model: c.oaModel,
+      messages,
+      max_tokens: (c.maxLength || 220) + 60,
+      temperature: c.temperature
+    };
+    let res, data;
+    try{
+      res = await fetch(c.oaEndpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
+    }catch(err){
+      recordDebug('openai', reqBody, null, err.message + ' — endpoint usado: "' + c.oaEndpoint + '". Verifique se está exatamente certo, se não há bloqueador de anúncios/privacidade ativo, e se a rede atual não bloqueia o domínio.');
+      throw new Error('Falha de rede ao chamar a API. Confira o endereço do endpoint e veja o modo de depuração nas Configurações.');
+    }
+    if (res.status === 429 && attempt < 4){
+      const t = await res.text().catch(()=> '');
+      let waitSecs = 4;
+      try{
+        const parsed = JSON.parse(t);
+        waitSecs = (parsed.error && parsed.error.metadata && parsed.error.metadata.retry_after_seconds) || 4;
+      }catch(e){}
+      const retryHeader = res.headers.get('Retry-After');
+      if (retryHeader) waitSecs = parseInt(retryHeader) || waitSecs;
+      updateStatus('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's… (tentativa ' + attempt + '/3)', false);
+      render();
+      await new Promise(r => setTimeout(r, waitSecs * 1000));
+      return callOpenAICompatible(messages, attempt + 1);
+    }
+    if (!res.ok){
+      const t = await res.text().catch(()=> '');
+      recordDebug('openai', reqBody, t);
+      throw new Error('API respondeu ' + res.status + ': ' + t.slice(0,200));
+    }
+    data = await res.json();
+    recordDebug('openai', reqBody, data);
+    const choice = data.choices && data.choices[0];
+    const text = choice && (choice.message ? choice.message.content : choice.text);
+    if (!text) throw new Error('Resposta da API veio sem texto (veja o modo de depuração).');
+    const cutOff = choice && (choice.finish_reason === 'length' || choice.finish_reason === 'max_tokens');
+    const metaBits = [];
+    if (data.usage) metaBits.push('~' + data.usage.total_tokens + ' tokens');
+    if (cutOff) metaBits.push('⚠ cortada pelo limite — aumente "tamanho máx. da resposta" nas Configurações');
+    return { text: text.trim(), meta: metaBits.join(' · ') || null, usage: data.usage || null, cutOff };
+  }
+
+  async function callAiHorde(messages){
+    const c = activeConnector();
+    const sys = messages.find(m => m.role === 'system');
+    const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
+    const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
+
+    // lembrete curto de POV/formato, repetido logo ANTES do ponto de continuação.
+    // Motivo: o max_context_length pode truncar o prompt pelo INÍCIO quando a história
+    // cresce, o que já derrubou o system prompt inteiro (e a regra de 1ª pessoa junto) em
+    // histórias mais longas. Modelos de completion pequenos também dão muito mais peso ao
+    // texto perto do cursor do que a instruções distantes no começo — então repetir aqui
+    // ajuda mesmo quando o prompt inteiro cabe sem cortes.
+    const povReminder = 'Lembrete: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos. O protagonista nunca é "você", "ele" nem "ela" — mesmo o nome dela nunca aparece como sujeito da própria ação.';
+    const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n[' + povReminder + ']\n\n';
+
+    // max_context_length precisa acompanhar os orçamentos configurados (histórico + fichas +
+    // system prompt + resposta), senão o worker trunca o prompt pelo início e derruba a
+    // regra de POV inteira. Antes isso ficava fixo em 2048, bem abaixo do que os orçamentos
+    // padrão (3000 + 1200) já somam sozinhos.
+    const genLength = (c.maxLength || 220) + 60;
+    const estimatedPromptTokens = Math.ceil(promptText.length / 3.2); // ~3.2 chars/token em PT-BR, estimativa conservadora
+    const maxContextLength = Math.min(8192, Math.max(2048, estimatedPromptTokens + genLength + 256));
+
+    const body = {
+      prompt: promptText,
+      params: {
+        n: 1,
+        max_context_length: maxContextLength,
+        max_length: genLength,
+        temperature: c.temperature,
+        rep_pen: 1.1,
+        top_p: 0.92
+      },
+      nsfw: !!c.hordeNsfw,
+      trusted_workers: false
+    };
+    if (c.hordeModels){
+      body.models = c.hordeModels.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+
+    let submitRes;
+    try{
+      submitRes = await fetch('https://aihorde.net/api/v2/generate/text/async', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'apikey': c.hordeKey || '0000000000'},
+        body: JSON.stringify(body)
+      });
+    }catch(err){
+      recordDebug('horde-submit', body, null, err.message);
+      throw new Error('Falha de rede ao contatar o AI Horde.');
+    }
+    if (!submitRes.ok){
+      const t = await submitRes.text().catch(()=> '');
+      recordDebug('horde-submit', body, t);
+      throw new Error('AI Horde recusou o pedido (' + submitRes.status + '): ' + t.slice(0,200));
+    }
+    const submitData = await submitRes.json();
+    recordDebug('horde-submit', body, submitData);
+    const jobId = submitData.id;
+    if (!jobId) throw new Error('AI Horde não retornou um id de geração (veja o modo de depuração).');
+
+    const started = Date.now();
+    while (Date.now() - started < 150000){
+      await new Promise(r => setTimeout(r, 3000));
+      updateStatus('Na fila do AI Horde… isso pode levar um tempinho, é uma rede comunitária gratuita.', false);
+      const statusRes = await fetch('https://aihorde.net/api/v2/generate/text/status/' + jobId);
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
+      recordDebug('horde-status', {jobId}, statusData);
+      if (statusData.done && statusData.generations && statusData.generations.length){
+        const raw = statusData.generations[0].text || '';
+        const clean = stripEcho(promptText, raw);
+        if (!clean){
+          throw new Error('O worker devolveu uma resposta vazia depois de remover o eco do prompt (veja o modo de depuração).');
+        }
+        return { text: clean, meta: submitData.kudos != null ? (submitData.kudos + ' kudos') : null, kudos: submitData.kudos };
+      }
+      if (statusData.faulted){
+        throw new Error('A geração falhou no AI Horde. Tente novamente.');
+      }
+    }
+    throw new Error('Tempo esgotado esperando o AI Horde. Tente novamente em instantes.');
+  }
+
+  async function callBuiltinClaude(messages){
+    const sys = messages.find(m => m.role === 'system');
+    const rest = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content
+    }));
+    const reqBody = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      system: sys ? sys.content : undefined,
+      messages: rest
+    };
+    let res, data;
+    try{
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(reqBody)
+      });
+    }catch(err){
+      recordDebug('builtin', reqBody, null, err.message);
+      throw new Error('Falha de rede ao contatar a API embutida.');
+    }
+    if (!res.ok){
+      const t = await res.text().catch(()=> '');
+      recordDebug('builtin', reqBody, t);
+      throw new Error('API embutida respondeu ' + res.status + ': ' + t.slice(0,200));
+    }
+    data = await res.json();
+    recordDebug('builtin', reqBody, data);
+    const textBlock = (data.content || []).find(b => b.type === 'text');
+    if (!textBlock) throw new Error('Resposta veio sem texto (veja o modo de depuração).');
+    return { text: textBlock.text.trim(), meta: null };
+  }
+
+  async function generate(actionText, opts){
+    const {messages} = buildPromptMessages(actionText, opts);
+    const conn = activeConnector();
+    let result;
+    if (conn.mode === 'horde') result = await callAiHorde(messages);
+    else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
+    else result = await callOpenAICompatible(messages);
+    result.text = cleanNarrationText(result.text, result.cutOff);
+    if (result.meta){
+      state.story.stats = state.story.stats || {totalTokens:0, totalKudos:0};
+      if (result.usage) state.story.stats.totalTokens += (result.usage.total_tokens || 0);
+      if (result.kudos) state.story.stats.totalKudos += result.kudos;
+    }
+    return result;
+  }
+
+  // remove marcações de markdown (o app não renderiza markdown, só HTML-escapa) e,
+  // se a resposta foi cortada pelo limite de tokens, apara a frase incompleta do final
+  // pra não deixar a cena travada no meio de uma palavra.
+  function cleanNarrationText(text, cutOff){
+    if (!text) return text;
+    let t = text;
+    // **negrito** ou *itálico/ação* -> vira texto puro, sem os asteriscos
+    t = t.replace(/\*\*(.*?)\*\*/gs, '$1');
+    t = t.replace(/\*(.*?)\*/gs, '$1');
+    t = t.replace(/\*/g, '');
+    t = t.replace(/[ \t]{2,}/g, ' ').trim();
+    if (cutOff){
+      const enders = ['.', '!', '?', '…', '."', '!"', '?"', '.”', '!”', '?”'];
+      let bestCut = -1;
+      enders.forEach(e => {
+        const idx = t.lastIndexOf(e);
+        if (idx > bestCut) bestCut = idx + e.length;
+      });
+      // só apara se sobrar uma parte razoável (evita devolver cena vazia quando o modelo não terminou nenhuma frase)
+      if (bestCut > 20 && bestCut < t.length) t = t.slice(0, bestCut).trim();
+    }
+    return t;
+  }
+
+  // ---------- turn actions ----------
+  function updateStatus(msg, isErr){
+    state.ui.statusMsg = msg; state.ui.statusErr = !!isErr; render();
+  }
+
+  // ---------- desfazer / refazer (undo/redo) ----------
+  function pushUndo(label){
+    if (!state.ui.undoStack) state.ui.undoStack = [];
+    state.ui.undoStack.push({ label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    if (state.ui.undoStack.length > 20) state.ui.undoStack.shift();
+    state.ui.redoStack = []; // qualquer ação nova invalida o "refazer"
+  }
+  function undoLast(){
+    const stack = state.ui.undoStack;
+    if (!stack || !stack.length) return;
+    if (!state.ui.redoStack) state.ui.redoStack = [];
+    state.ui.redoStack.push({ label: stack[stack.length-1].label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    const prev = stack.pop();
+    state.story.turns = prev.turns;
+    scheduleSave();
+    updateStatus('Desfeito: ' + prev.label, false);
+    render();
+  }
+  function redoLast(){
+    const stack = state.ui.redoStack;
+    if (!stack || !stack.length) return;
+    if (!state.ui.undoStack) state.ui.undoStack = [];
+    state.ui.undoStack.push({ label: stack[stack.length-1].label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    const next = stack.pop();
+    state.story.turns = next.turns;
+    scheduleSave();
+    updateStatus('Refeito: ' + next.label, false);
+    render();
+  }
+
+  async function sendAction(){
+    const raw = state.ui.composerText;
+    const text = raw.trim();
+    if (!text || state.ui.generating) return;
+    const s = state.story;
+    s.turns.push({id: uid(), type:'user', text: raw});
+    state.ui.composerText = '';
+    state.ui.generating = true;
+    updateStatus('Escrevendo a próxima cena…', false);
+    render();
+    try{
+      const result = await generate(text);
+      s.turns.push({id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0});
+      updateStatus(result.meta ? ('Gerado ✓  ' + result.meta) : '', false);
+    }catch(err){
+      updateStatus('Erro: ' + err.message, true);
+    }
+    state.ui.generating = false;
+    scheduleSave();
+    render();
+    setTimeout(() => {
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 30);
+  }
+
+  async function continueStory(){
+    if (state.ui.generating) return;
+    const s = state.story;
+    state.ui.generating = true;
+    updateStatus('Continuando a cena…', false);
+    render();
+    try{
+      const result = await generate('', {isContinue:true});
+      s.turns.push({id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0});
+      updateStatus(result.meta ? ('Gerado ✓  ' + result.meta) : '', false);
+      scheduleSave();
+    }catch(err){
+      updateStatus('Erro: ' + err.message, true);
+    }
+    state.ui.generating = false;
+    render();
+    setTimeout(() => {
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 30);
+  }
+
+  function lastAiTurn(){
+    const s = state.story;
+    for (let i = s.turns.length - 1; i >= 0; i--){
+      if (s.turns[i].type === 'ai') return s.turns[i];
+    }
+    return null;
+  }
+
+  async function retryLast(guidance){
+    const s = state.story;
+    if (state.ui.generating) return;
+    const t = lastAiTurn();
+    if (!t) return;
+    pushUndo('retry');
+    state.ui.generating = true;
+    updateStatus('Gerando uma tentativa nova…', false);
+    render();
+    try{
+      const opts = {excludeTurnId: t.id};
+      if (guidance) opts.guidance = guidance;
+      if (t.isContinue) opts.isContinue = true;
+      const result = await generate(t.sourceAction || '', opts);
+      if (!t.alts) t.alts = [t.text];
+      t.alts.push(result.text);
+      t.altIndex = t.alts.length - 1;
+      t.text = result.text;
+      updateStatus(result.meta ? ('Nova tentativa ✓  ' + result.meta) : '', false);
+    }catch(err){
+      updateStatus('Erro: ' + err.message, true);
+    }
+    state.ui.generating = false;
+    state.ui.retryGuidanceOpen = false;
+    state.ui.retryGuidanceText = '';
+    scheduleSave();
+    render();
+  }
+
+  function cycleAlt(turnId, dir){
+    const t = state.story.turns.find(t => t.id === turnId);
+    if (!t || !t.alts || t.alts.length < 2) return;
+    t.altIndex = Math.max(0, Math.min(t.alts.length - 1, (t.altIndex || 0) + dir));
+    t.text = t.alts[t.altIndex];
+    scheduleSave();
+    render();
+  }
+
+  function eraseLast(){
+    const s = state.story;
+    if (!s.turns.length) return;
+    pushUndo('erase');
+    s.turns.pop();
+    scheduleSave();
+    updateStatus('Último trecho apagado — dá pra desfazer se quiser.', false);
+    render();
+  }
+
+  function rewindTo(turnId){
+    const s = state.story;
+    const idx = s.turns.findIndex(t => t.id === turnId);
+    if (idx === -1) return;
+    pushUndo('voltar no tempo');
+    s.turns = s.turns.slice(0, idx + 1);
+    state.ui.openActionsFor = null;
+    scheduleSave();
+    updateStatus('Voltou pro ponto #' + (idx + 1) + ' — dá pra desfazer se quiser.', false);
+    render();
+  }
+
+  let editingTurnId = null;
+  function startEdit(id){ editingTurnId = id; state.ui.openActionsFor = null; render(); }
+  function cancelEdit(){ editingTurnId = null; render(); }
+  function saveEdit(id, val){
+    pushUndo('edição de trecho');
+    const t = state.story.turns.find(t => t.id === id);
+    if (t) t.text = val;
+    editingTurnId = null;
+    scheduleSave();
+    updateStatus('Edição salva — dá pra desfazer se quiser.', false);
+    render();
+  }
+  function deleteTurn(id){
+    const s = state.story;
+    pushUndo('apagar trecho');
+    s.turns = s.turns.filter(t => t.id !== id);
+    state.ui.openActionsFor = null;
+    scheduleSave();
+    updateStatus('Trecho apagado — dá pra desfazer se quiser.', false);
+    render();
+  }
+
+  // ---------- auto memory summarization ----------
+  async function summarizeOldTurns(){
+    if (state.ui.summarizing) return;
+    const s = state.story;
+    const live = s.turns.filter(t => !t.archived);
+    const chunk = live.slice(0, Math.max(0, live.length - 6)); // deixa as últimas 6 falas de fora
+    if (chunk.length < 2){
+      updateStatus('Ainda não há trechos antigos suficientes pra resumir.', true);
+      render();
+      return;
+    }
+    state.ui.summarizing = true;
+    updateStatus('Resumindo o início da história…', false);
+    render();
+    try{
+      const text = chunk.map(t => (t.type === 'user' ? 'Ação: ' : 'Narração: ') + t.text).join('\n');
+      const messages = [
+        {role:'system', content:'Resuma a passagem de história a seguir em no máximo 4 frases, mantendo nomes, lugares e decisões importantes. Responda só com o resumo.'},
+        {role:'user', content: text}
+      ];
+      const conn = activeConnector();
+      let result;
+      if (conn.mode === 'horde') result = await callAiHorde(messages);
+      else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
+      else result = await callOpenAICompatible(messages);
+      s.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (s.memory.chapters.length + 1), text: result.text.trim() });
+      chunk.forEach(t => { t.archived = true; });
+      updateStatus('Início da história resumido e arquivado.', false);
+    }catch(err){
+      updateStatus('Erro ao resumir: ' + err.message, true);
+    }
+    state.ui.summarizing = false;
+    scheduleSave();
+    render();
+  }
+
+  // ---------- generic card list management (personagens / locais / grupos) ----------
+  function cardCollection(type){
+    if (type === 'char') return state.story.memory.characters;
+    if (type === 'loc') return state.story.memory.locations;
+    if (type === 'group') return state.story.memory.groups;
+  }
+  function blankCard(type){
+    if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false, alwaysOn:true, keywords:''};
+    if (type === 'loc') return {id: uid(), name:'', origin:'', desc:'', notes:'', alwaysOn:true, keywords:''};
+    if (type === 'group') return {id: uid(), name:'', members:'', dynamic:'', alwaysOn:true, keywords:''};
+  }
+  function addCard(type){
+    cardCollection(type).push(blankCard(type));
+    scheduleSave();
+    render();
+  }
+  function duplicateCard(type, id){
+    const list = cardCollection(type);
+    const c = list.find(c => c.id === id);
+    if (!c) return;
+    const copy = Object.assign({}, c, {id: uid(), name: c.name ? c.name + ' (cópia)' : ''});
+    if (type === 'char') copy.isProtagonist = false;
+    const idx = list.findIndex(c => c.id === id);
+    list.splice(idx + 1, 0, copy);
+    scheduleSave();
+    render();
+  }
+  function removeCard(type, id){
+    const list = cardCollection(type);
+    if (type === 'char') state.story.memory.characters = list.filter(c => c.id !== id);
+    if (type === 'loc') state.story.memory.locations = list.filter(c => c.id !== id);
+    if (type === 'group') state.story.memory.groups = list.filter(c => c.id !== id);
+    scheduleSave();
+    render();
+  }
+  function updateCard(type, id, field, value){
+    const list = cardCollection(type);
+    const c = list.find(c => c.id === id);
+    if (!c) return;
+    c[field] = value;
+    if (type === 'char' && field === 'isProtagonist' && value === true){
+      list.forEach(other => { if (other.id !== id) other.isProtagonist = false; });
+    }
+    scheduleSave();
+  }
+  function addChapterManual(){
+    state.story.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (state.story.memory.chapters.length + 1), text: '' });
+    scheduleSave();
+    render();
+  }
+  function updateChapter(id, field, value){
+    const ch = state.story.memory.chapters.find(c => c.id === id);
+    if (ch) ch[field] = value;
+    scheduleSave();
+  }
+  function removeChapter(id){
+    state.story.memory.chapters = state.story.memory.chapters.filter(c => c.id !== id);
+    scheduleSave();
+    render();
+  }
+
+  function toggleCollapsed(key){
+    const set = state.ui.collapsed;
+    if (set.has(key)) set.delete(key); else set.add(key);
+    render();
+  }
+  function isCollapsed(key){ return state.ui.collapsed.has(key); }
+
+  // aliases pra manter o restante do código estável
+  const addCharacter = () => addCard('char');
+  const duplicateCharacter = (id) => duplicateCard('char', id);
+  const removeCharacter = (id) => removeCard('char', id);
+  const updateCharacter = (id, field, value) => updateCard('char', id, field, value);
+
+
+  // ---------- story management ----------
+  async function createStory(){
+    const title = window.prompt('Nome da nova aventura:', 'Nova aventura');
+    if (title === null) return;
+    const s = newStory(title || 'Nova aventura');
+    state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
+    state.story = s;
+    await sSet('story:' + s.id, s);
+    await sSet('stories:index', state.index);
+    await sSet('settings:lastOpen', s.id);
+    state.ui.modal = null;
+    render();
+  }
+
+  async function deleteStory(id){
+    const ok = window.confirm('Apagar esta aventura pra sempre? Não dá pra desfazer.');
+    if (!ok) return;
+    await sDelete('story:' + id);
+    state.index = state.index.filter(s => s.id !== id);
+    await sSet('stories:index', state.index);
+    if (state.story && state.story.id === id){
+      if (state.index.length) await loadStory(state.index[0].id);
+      else {
+        const s = newStory('Nova aventura');
+        state.story = s;
+        state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
+        await sSet('story:' + s.id, s);
+        await sSet('stories:index', state.index);
+      }
+    }
+    render();
+  }
+
+  function exportStory(){
+    const blob = new Blob([JSON.stringify(state.story, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (state.story.title || 'aventura').replace(/[^a-z0-9]/gi,'_') + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importStory(file){
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try{
+        const s = normalizeStory(JSON.parse(e.target.result));
+        s.id = uid(); // avoid collisions
+        s.updatedAt = Date.now();
+        state.index.unshift({id:s.id, title:s.title || 'Importada', updatedAt:s.updatedAt});
+        state.story = s;
+        await sSet('story:' + s.id, s);
+        await sSet('stories:index', state.index);
+        await sSet('settings:lastOpen', s.id);
+        state.ui.modal = null;
+        render();
+      }catch(err){
+        alert('Arquivo inválido.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- rendering ----------
+  function el(html){ const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content; }
+  function esc(str){ return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function render(){
+    const app = document.getElementById('app');
+    const s = state.story;
+    const prevFeed = document.querySelector('.feed');
+    const savedFeedScroll = prevFeed ? prevFeed.scrollTop : null;
+    const prevMem = document.querySelector('.memory-panel');
+    const savedMemScroll = prevMem ? prevMem.scrollTop : null;
+    app.classList.remove('force-mobile', 'force-desktop');
+    if (state.ui.forcedLayout === 'mobile') app.classList.add('force-mobile');
+    if (state.ui.forcedLayout === 'desktop') app.classList.add('force-desktop');
+    if (!s){ app.innerHTML = '<div style="padding:40px;text-align:center;color:#9a9fb0;">Carregando…</div>'; return; }
+
+    app.innerHTML = `
+      <header>
+        <div class="titlewrap">
+          <span class="tag">Aventura</span>
+          <h1 id="titleField" contenteditable="true" spellcheck="false">${esc(s.title)}</h1>
+        </div>
+        <div class="btns">
+          <span id="saveWarning" class="save-warning" style="display:${state.ui.saveWarning ? 'inline' : 'none'};">⚠ não salvou</span>
+          <button class="icon" id="btnMemory" title="Memória, personagens, locais...">📖</button>
+          <button class="icon" id="btnStories" title="Minhas histórias">📚</button>
+          <button class="icon" id="btnNew" title="Nova aventura">＋</button>
+          <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout celular/PC manualmente">${state.ui.forcedLayout === 'mobile' ? '📱' : state.ui.forcedLayout === 'desktop' ? '🖥️' : '🔄'}</button>
+          <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
+        </div>
+      </header>
+      <div class="drawer-backdrop ${state.ui.memoryPanelOpen ? 'open' : ''}" id="memoryBackdrop"></div>
+      <div class="layout">
+        <aside class="memory-panel ${state.ui.memoryPanelOpen ? 'open' : ''}">
+          <button class="icon ghost memory-panel-close" id="btnCloseMemory">✕ fechar</button>
+          <div>
+            <h2>Memória</h2>
+            <div class="field">
+              <label>Mundo / cenário</label>
+              <textarea id="memWorld" rows="3" placeholder="Onde e quando se passa...">${esc(s.memory.world)}</textarea>
+            </div>
+            <div class="field">
+              <label>Notas do autor</label>
+              <textarea id="memNote" rows="2" placeholder="Regras fixas, tom, coisas que nunca mudam...">${esc(s.memory.authorNote)}</textarea>
+            </div>
+            <div class="field">
+              <label>Capítulos resumidos (editáveis)</label>
+              ${(() => {
+                const conn = activeConnector();
+                const totalLive = s.turns.filter(t => !t.archived);
+                const selected = selectTurnsByBudget(totalLive, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
+                const dropped = totalLive.length - selected.length;
+                const dismissedAt = state.ui.nudgeDismissedAt || 0;
+                if (dropped >= 10 && dropped > dismissedAt && !state.ui.summarizing){
+                  return `<div class="nudge-banner">
+                    ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo. Resumir agora evita perder esses detalhes.
+                    <div style="margin-top:7px; display:flex; gap:6px;">
+                      <button id="btnNudgeSummarize">🧠 Resumir agora</button>
+                      <button id="btnNudgeDismiss" class="ghost" data-dropped="${dropped}">dispensar</button>
+                    </div>
+                  </div>`;
+                }
+                return '';
+              })()}
+              ${s.memory.chapters.map(ch => `
+                <div class="char-card" data-chapterid="${ch.id}" style="margin-bottom:8px;">
+                  <div class="ccard-top">
+                    <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título do capítulo" style="flex:1;">
+                    <button class="danger icon" data-chapterdel="${ch.id}">✕</button>
+                  </div>
+                  <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo desse trecho da história...">${esc(ch.text)}</textarea>
+                </div>
+              `).join('') || '<div class="summ-note">Nenhum capítulo ainda — vai sendo criado conforme você resume trechos antigos, ou adiciona um manualmente.</div>'}
+              <button id="btnAddChapter" style="width:100%;">＋ Adicionar capítulo manual</button>
+            </div>
+            <button id="btnSummarize" style="width:100%" ${state.ui.summarizing?'disabled':''}>${state.ui.summarizing ? '🧠 Resumindo…' : '🧠 Resumir início automaticamente'}</button>
+            <div class="summ-note">Comprime as falas mais antigas num novo capítulo e as arquiva (elas continuam visíveis no histórico, só saem do contexto ativo).</div>
+            ${state.ui.statusMsg ? `<div class="summ-note ${state.ui.statusErr ? 'err' : ''}" style="margin-top:6px;">${esc(state.ui.statusMsg)}</div>` : ''}
+          </div>
+
+          <div>
+            <h2 data-secttoggle="characters">Storycards de personagens <span class="chevron">${isCollapsed('sect:characters') ? '▸' : '▾'}</span></h2>
+            ${!isCollapsed('sect:characters') ? `
+            <div class="summ-note" style="margin-bottom:8px;">Cada ficha vale pra qualquer personagem — inclusive a protagonista. A IA só deixa alguém saber ou reagir ao que estiver escrito aqui + o que já rolou na história.</div>
+            ${s.memory.characters.map(c => {
+              const key = 'char:' + c.id;
+              const collapsed = isCollapsed(key);
+              return `
+              <div class="char-card" data-charid="${c.id}">
+                <div class="ccard-top">
+                  <button class="ccard-toggle" data-ctoggle="${key}" title="expandir/recolher">${collapsed ? '▸' : '▾'}</button>
+                  <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="name" value="${esc(c.name)}" placeholder="Nome" style="flex:1;">
+                  ${c.isProtagonist ? '<span class="protag-badge">protagonista</span>' : ''}
+                  <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
+                  <button class="danger icon" data-cdel="${key}">✕</button>
+                </div>
+                ${collapsed ? '' : `
+                  <div class="ccard-row2">
+                    <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="age" value="${esc(c.age)}" placeholder="Idade">
+                    <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="origin" value="${esc(c.origin)}" placeholder="Origem/universo (ex: Naruto, original...)">
+                  </div>
+                  <label class="protag-check">
+                    <input type="checkbox" data-cprotag="${c.id}" ${c.isProtagonist?'checked':''}> é a protagonista
+                  </label>
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="char:${c.id}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citada)
+                  </label>
+                  ${c.alwaysOn===false ? `<input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
+                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="appearance" rows="2" placeholder="Aparência física...">${esc(c.appearance)}</textarea>
+                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="personality" rows="2" placeholder="Personalidade, jeito de ser...">${esc(c.personality)}</textarea>
+                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relations" rows="2" placeholder="Relações/família (ex: irmã mais nova de X, casada com Y...)">${esc(c.relations)}</textarea>
+                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="desc" rows="2" placeholder="Histórico, papel na história...">${esc(c.desc)}</textarea>
+                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="knows" rows="2" placeholder="O que sabe até agora...">${esc(c.knows)}</textarea>
+                `}
+              </div>
+            `;}).join('')}
+            <button data-addtype="char" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar personagem</button>
+            ` : ''}
+          </div>
+
+          <div>
+            <h2 data-secttoggle="locations">Locais <span class="chevron">${isCollapsed('sect:locations') ? '▸' : '▾'}</span></h2>
+            ${!isCollapsed('sect:locations') ? `
+            <div class="summ-note" style="margin-bottom:8px;">Lugares importantes — ajuda a manter geografia e detalhes consistentes ao longo da história.</div>
+            ${s.memory.locations.map(l => {
+              const key = 'loc:' + l.id;
+              const collapsed = isCollapsed(key);
+              return `
+              <div class="char-card" data-locid="${l.id}">
+                <div class="ccard-top">
+                  <button class="ccard-toggle" data-ctoggle="${key}" title="expandir/recolher">${collapsed ? '▸' : '▾'}</button>
+                  <input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="name" value="${esc(l.name)}" placeholder="Nome do local" style="flex:1;">
+                  <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
+                  <button class="danger icon" data-cdel="${key}">✕</button>
+                </div>
+                ${collapsed ? '' : `
+                  <input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="origin" value="${esc(l.origin)}" placeholder="Origem/universo (ex: Naruto, original...)" style="margin-bottom:5px;">
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="loc:${l.id}" ${l.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citado)
+                  </label>
+                  ${l.alwaysOn===false ? `<input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="keywords" value="${esc(l.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
+                  <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="desc" rows="2" placeholder="Como é esse lugar...">${esc(l.desc)}</textarea>
+                  <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="notes" rows="2" placeholder="Detalhes importantes (perigos, segredos, quem mora lá...)">${esc(l.notes)}</textarea>
+                `}
+              </div>
+            `;}).join('')}
+            <button data-addtype="loc" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar local</button>
+            ` : ''}
+          </div>
+
+          <div>
+            <h2 data-secttoggle="groups">Grupos / famílias <span class="chevron">${isCollapsed('sect:groups') ? '▸' : '▾'}</span></h2>
+            ${!isCollapsed('sect:groups') ? `
+            <div class="summ-note" style="margin-bottom:8px;">Pra organizar uma família inteira ou facção — quem faz parte e como se tratam entre si.</div>
+            ${s.memory.groups.map(g => {
+              const key = 'group:' + g.id;
+              const collapsed = isCollapsed(key);
+              return `
+              <div class="char-card" data-groupid="${g.id}">
+                <div class="ccard-top">
+                  <button class="ccard-toggle" data-ctoggle="${key}" title="expandir/recolher">${collapsed ? '▸' : '▾'}</button>
+                  <input type="text" data-ctype="group" data-cid="${g.id}" data-cfield="name" value="${esc(g.name)}" placeholder="Nome do grupo/família" style="flex:1;">
+                  <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
+                  <button class="danger icon" data-cdel="${key}">✕</button>
+                </div>
+                ${collapsed ? '' : `
+                  <label class="protag-check" style="color:var(--muted);">
+                    <input type="checkbox" data-alwayson="group:${g.id}" ${g.alwaysOn!==false?'checked':''}> sempre incluir no contexto (senão, só quando citado)
+                  </label>
+                  ${g.alwaysOn===false ? `<input type="text" data-ctype="group" data-cid="${g.id}" data-cfield="keywords" value="${esc(g.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-bottom:6px;">` : ''}
+                  <textarea data-ctype="group" data-cid="${g.id}" data-cfield="members" rows="2" placeholder="Quem faz parte (nomes)...">${esc(g.members)}</textarea>
+                  <textarea data-ctype="group" data-cid="${g.id}" data-cfield="dynamic" rows="2" placeholder="Como se tratam, hierarquia, tensões...">${esc(g.dynamic)}</textarea>
+                `}
+              </div>
+            `;}).join('')}
+            <button data-addtype="group" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar grupo/família</button>
+            ` : ''}
+          </div>
+
+          <div>
+            <h2>Segredos do mundo</h2>
+            <div class="field">
+              <label>Oculto do protagonista (só o narrador sabe)</label>
+              <textarea id="memSecrets" rows="4" placeholder="Coisas que existem na história mas ainda não foram descobertas...">${esc(s.memory.secrets)}</textarea>
+            </div>
+          </div>
+        </aside>
+
+        <main>
+          <div class="feed">
+            ${s.turns.length === 0 ? `
+              <div class="empty-state">
+                <h2>A página está em branco.</h2>
+                <p>Escreva a primeira ação lá embaixo pra começar a história.</p>
+              </div>` : `<div class="page">${s.turns.map((t, i) => (i>0 && t.type==='user' ? '<br><br>' : ' ') + renderTurn(t, i)).join('')}</div>`}
+          </div>
+          <div class="composer" style="${editingTurnId ? 'display:none;' : ''}">
+            <div class="composer-inner">
+              <textarea id="composer" placeholder="O que eu faço agora?" rows="2">${esc(state.ui.composerText)}</textarea>
+              <div id="tokenEstimate" class="token-estimate mono"></div>
+
+              ${state.ui.retryGuidanceOpen ? `
+                <div class="retry-guidance">
+                  <input type="text" id="retryGuidanceInput" placeholder="O que deve acontecer nessa tentativa? (opcional)" value="${esc(state.ui.retryGuidanceText || '')}">
+                  <button class="primary" id="btnRetryGo">Gerar</button>
+                  <button class="ghost" id="btnRetryCancel">cancelar</button>
+                </div>
+              ` : ''}
+
+              <div class="dungeon-bar dungeon-bar-main">
+                <button id="btnContinue" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Continua a cena sem você escrever nada">▶ Continuar</button>
+                <div class="retry-group">
+                  <button id="btnRetry" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Gera uma versão nova da última cena">↺ Retry</button>
+                  ${(() => { const lt = lastAiTurn(); return (lt && lt.alts && lt.alts.length > 1) ? `
+                    <button class="retry-nav" data-altnav="${lt.id}:-1" ${lt.altIndex<=0?'disabled':''} title="Tentativa anterior">‹</button>
+                    <span class="retry-count mono">${(lt.altIndex||0)+1}/${lt.alts.length}</span>
+                    <button class="retry-nav" data-altnav="${lt.id}:1" ${lt.altIndex>=lt.alts.length-1?'disabled':''} title="Próxima tentativa">›</button>
+                  ` : ''; })()}
+                  <button id="btnRetryOptions" title="Dar uma instrução específica pro retry">🎯</button>
+                </div>
+              </div>
+              <div class="dungeon-bar dungeon-bar-secondary">
+                <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer última mudança">↩ Desfazer</button>
+                <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
+                <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
+                <span class="spacer"></span>
+                <span class="status ${state.ui.statusErr?'err':''}">${esc(state.ui.statusMsg)}</span>
+              </div>
+              <div class="composer-row">
+                <span class="spacer"></span>
+                <button class="primary" id="btnSend" ${state.ui.generating?'disabled':''}>${state.ui.generating ? 'Gerando…' : 'Enviar ➤'}</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <nav class="spine" title="Clique num ponto pra voltar até ali">
+          ${s.turns.map((t,i) => `<div class="tab ${t.type} ${i===s.turns.length-1?'current':''}" data-jump="${t.id}">${i+1}</div>`).join('')}
+        </nav>
+      </div>
+
+      ${state.ui.modal === 'settings' ? renderSettingsModal() : ''}
+      ${state.ui.modal === 'stories' ? renderStoriesModal() : ''}
+    `;
+
+    bindEvents();
+
+    if (savedFeedScroll !== null){
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = savedFeedScroll;
+    }
+    if (savedMemScroll !== null){
+      const mem = document.querySelector('.memory-panel');
+      if (mem) mem.scrollTop = savedMemScroll;
+    }
+
+    const editbox = document.querySelector('.turn-editbox');
+    if (editbox) autoSizeTextarea(editbox);
+
+    updateTokenEstimateDisplay();
+  }
+
+  function autoSizeTextarea(el){
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+
+  function updateTokenEstimateDisplay(){
+    const el = document.getElementById('tokenEstimate');
+    if (!el || !state.story) return;
+    try{
+      const draft = state.ui.composerText || '';
+      const {messages} = buildPromptMessages(draft, {});
+      const total = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+      el.textContent = '≈ ' + total + ' tokens nesta próxima mensagem (estimativa)';
+    }catch(e){
+      el.textContent = '';
+    }
+  }
+  function renderTurn(t, i){
+    const isEditing = editingTurnId === t.id;
+    const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '');
+    if (isEditing){
+      return `<span class="turn ${t.type} ${t.archived?'archived':''}" data-turnid="${t.id}">
+        <textarea class="turn-editbox" data-editbox="${t.id}" rows="4">${esc(t.text)}</textarea>
+        <span class="actions" style="opacity:1;">
+          <button data-save="${t.id}">salvar</button>
+          <button data-cancel="${t.id}">cancelar</button>
+        </span>
+      </span>`;
+    }
+    const menuOpen = state.ui.openActionsFor === t.id;
+    return `<span class="turn ${t.type} ${t.archived?'archived':''} ${menuOpen?'active-menu':''}" data-turnid="${t.id}" data-turntap="${t.id}" title="trecho #${i+1}${label}">${esc(t.text)}${menuOpen ? `<span class="actions actions-open">
+        <button data-edit="${t.id}" title="editar">✎ editar</button>
+        <button data-rewind="${t.id}" title="voltar aqui">↺ voltar aqui</button>
+        <button data-del="${t.id}" title="apagar">✕ apagar</button>
+      </span>` : ''}</span>`;
+  }
+
+  function renderSettingsModal(){
+    const c = state.connector;
+    const s = state.story;
+    return `
+    <div class="modal-overlay" id="overlaySettings">
+      <div class="modal">
+        <button class="close icon ghost" id="closeSettings">✕</button>
+        <h2>Configurações da API</h2>
+        <div class="helpbox" style="margin-bottom:14px;">
+          Versão do app: <strong>v26</strong>
+          ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
+        </div>
+        <div class="field">
+          <label>Provedor</label>
+          <select id="connMode">
+            <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, comunitário, aceita NSFW)</option>
+            <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI (OpenRouter, Ollama, etc.)</option>
+            <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (só pra testar — sem NSFW)</option>
+          </select>
+        </div>
+
+        ${c.mode === 'builtin' ? `
+          <div class="helpbox">
+            Usa o Claude da própria Anthropic, sem precisar de chave. Bom pra confirmar que o app (memória, rewind, etc.) está funcionando,
+            mas o Claude não gera conteúdo adulto/explícito — pra isso, use AI Horde ou sua própria API.
+          </div>
+        ` : ''}
+
+        ${c.mode === 'horde' ? `
+          <div class="field">
+            <label>Chave de API do AI Horde (opcional)</label>
+            <input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo">
+          </div>
+          <div class="field">
+            <label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir conteúdo adulto (NSFW)</label>
+          </div>
+          <div class="field">
+            <label>Modelos preferidos (opcional, separados por vírgula)</label>
+            <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: MythoMax-L2-13B">
+          </div>
+          <div class="helpbox">
+            Deixar em branco pega "qualquer worker disponível", o que às vezes cai num modelo fraco e sai do contexto. Modelos mais
+            conhecidos por manter coerência em RP/aventura: <strong>MythoMax-L2-13B</strong>, <strong>Fimbulvetr-11B-v2</strong>.
+            Nem sempre estão online (a rede é voluntária), mas vale tentar preencher esse campo.
+            <br><br>Chave anônima funciona, mas tem prioridade mais baixa (fila mais longa). Registre-se de graça em
+            <a href="https://aihorde.net/register" target="_blank" rel="noopener">aihorde.net/register</a> pra pegar uma chave com prioridade melhor.
+            <br><br>Se aparecer "falha de rede", é porque o Claude.ai bloqueia chamadas a domínios externos de dentro do preview do app —
+            baixe o arquivo .html e abra ele diretamente no seu navegador (fora do Claude.ai) pra essa opção funcionar.
+          </div>
+        ` : ''}
+        ${c.mode === 'openai' ? `
+          <div class="field">
+            <label>Endpoint (URL completa de chat/completions)</label>
+            <input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://openrouter.ai/api/v1/chat/completions">
+          </div>
+          <div class="field">
+            <label>Chave de API</label>
+            <input type="text" id="oaKey" value="${esc(c.oaKey)}" placeholder="sk-...">
+          </div>
+          <div class="field">
+            <label>Nome do modelo</label>
+            <input type="text" id="oaModel" value="${esc(c.oaModel)}" placeholder="ex: meta-llama/llama-3.1-70b-instruct">
+          </div>
+          <div class="helpbox">
+            Funciona com qualquer serviço que fale o formato de "chat completions" da OpenAI: OpenRouter (tem opções gratuitas),
+            Ollama local (endpoint tipo http://localhost:11434/v1/chat/completions), text-generation-webui, etc.
+            <br><br>Mesma observação: se der "falha de rede", abra o arquivo .html baixado direto no navegador, fora do Claude.ai.
+          </div>
+        ` : ''}
+
+        <div class="divider"></div>
+        <div class="row2">
+          <div class="field">
+            <label>Tamanho máx. da resposta (tokens)</label>
+            <input type="text" id="maxLength" value="${c.maxLength}">
+          </div>
+          <div class="field">
+            <label>Temperatura (0–2)</label>
+            <input type="text" id="temperature" value="${c.temperature}">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Orçamento de tokens pro histórico</label>
+            <input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}">
+          </div>
+          <div class="field">
+            <label>Teto de falas (segurança)</label>
+            <input type="text" id="maxHistoryTurns" value="${c.maxHistoryTurns}">
+          </div>
+        </div>
+        <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
+          Em vez de sempre mandar um número fixo de falas, o app inclui as falas mais recentes que couberem dentro desse orçamento
+          (estimativa aproximada). O "teto de falas" é só uma trava de segurança, caso você escreva ações bem curtas.
+        </div>
+        <div class="field">
+          <label>Orçamento de tokens pro bloco de fichas (personagens+locais+grupos)</label>
+          <input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}">
+        </div>
+        <div class="helpbox" style="margin-top:-6px;margin-bottom:14px;">
+          Fichas marcadas "sempre incluir" nunca são cortadas. Entre as marcadas "só quando citada", as mencionadas mais
+          recentemente têm prioridade — se todas juntas passarem desse orçamento, as menos recentes ficam de fora dessa mensagem.
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (mostra a resposta crua da API)</label>
+        </div>
+        ${c.debugMode && state.ui.lastDebug ? `
+          <div class="helpbox mono" style="max-height:220px; overflow:auto; white-space:pre-wrap;">
+            <strong>[${state.ui.lastDebug.time}] ${esc(state.ui.lastDebug.provider)}</strong><br>
+            ${state.ui.lastDebug.error ? ('ERRO: ' + esc(state.ui.lastDebug.error)) : ''}
+            RESPOSTA: ${esc(JSON.stringify(state.ui.lastDebug.response).slice(0, 1500))}
+          </div>
+        ` : ''}
+
+        <div class="divider"></div>
+        <h2>Sincronização (Google Drive)</h2>
+        ${state.drive.signedIn ? `
+          <div class="helpbox">Conectado ✓ — seus dados sincronizam automaticamente por essa conta Google, em qualquer aparelho onde você entrar.</div>
+          <button class="danger" id="btnGoogleSignOut" style="width:100%;">Sair da conta Google</button>
+        ` : `
+          <div class="field">
+            <label>Google OAuth Client ID</label>
+            <input type="text" id="googleClientId" value="${esc(state.drive.clientId || '')}" placeholder="xxxxx.apps.googleusercontent.com">
+          </div>
+          <button class="primary" id="btnGoogleSignIn" style="width:100%;">Entrar com Google</button>
+          <div class="helpbox">
+            Precisa de um Client ID configurado uma vez (grátis) no Google Cloud Console. E essa página precisa estar aberta
+            num endereço https:// (ou http://localhost) — abrir o arquivo direto com duplo clique não funciona com login do Google.
+            Pede pro Claude o passo a passo se ainda não configurou.
+          </div>
+        `}
+
+        <button class="primary" id="saveSettings" style="width:100%;margin-top:6px;">Salvar configurações</button>
+      </div>
+    </div>`;
+  }
+
+  function renderStoriesModal(){
+    return `
+    <div class="modal-overlay" id="overlayStories">
+      <div class="modal">
+        <button class="close icon ghost" id="closeStories">✕</button>
+        <h2>Minhas aventuras</h2>
+        ${state.index.map(s => `
+          <div class="story-item">
+            <div class="info">
+              <div class="t">${esc(s.title)}</div>
+              <div class="d">atualizado em ${new Date(s.updatedAt).toLocaleString('pt-BR')}</div>
+            </div>
+            <button data-open="${s.id}">abrir</button>
+            <button class="danger" data-delstory="${s.id}">apagar</button>
+          </div>
+        `).join('') || '<p style="color:var(--muted)">Nenhuma aventura ainda.</p>'}
+        <div class="divider"></div>
+        <div style="display:flex; gap:8px;">
+          <button class="primary" id="btnCreateStory" style="flex:1;">＋ Nova aventura</button>
+          <button id="btnExportStory">Exportar atual (.json)</button>
+          <label class="button" style="display:inline-flex;align-items:center;">
+            <button id="btnImportTrigger">Importar</button>
+            <input type="file" id="importInput" accept=".json" style="display:none;">
+          </label>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function bindEvents(){
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => document.querySelectorAll(sel);
+
+    const editboxEl = $('.turn-editbox');
+    if (editboxEl) editboxEl.addEventListener('input', e => autoSizeTextarea(e.target));
+
+    const titleField = $('#titleField');
+    if (titleField) titleField.addEventListener('blur', e => {
+      state.story.title = e.target.textContent.trim() || 'Sem título';
+      scheduleSave();
+    });
+
+    const btnStories = $('#btnStories'); if (btnStories) btnStories.onclick = () => { state.ui.modal = 'stories'; render(); };
+    const btnSettings = $('#btnSettings'); if (btnSettings) btnSettings.onclick = () => { state.ui.modal = 'settings'; render(); };
+    const btnMemory = $('#btnMemory'); if (btnMemory) btnMemory.onclick = () => { state.ui.memoryPanelOpen = true; render(); };
+    const btnCloseMemory = $('#btnCloseMemory'); if (btnCloseMemory) btnCloseMemory.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
+    const memoryBackdrop = $('#memoryBackdrop'); if (memoryBackdrop) memoryBackdrop.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
+    const btnNew = $('#btnNew'); if (btnNew) btnNew.onclick = createStory;
+    const btnLayoutToggle = $('#btnLayoutToggle');
+    if (btnLayoutToggle) btnLayoutToggle.onclick = () => {
+      const order = ['auto', 'mobile', 'desktop'];
+      const next = order[(order.indexOf(state.ui.forcedLayout) + 1) % order.length];
+      state.ui.forcedLayout = next;
+      try{ localStorage.setItem('aventura:forcedLayout', next); }catch(e){}
+      render();
+    };
+
+    const bind = (id, ev, fn) => { const e = $(id); if (e) e.addEventListener(ev, fn); };
+    bind('#memWorld','input', e => { state.story.memory.world = e.target.value; scheduleSave(); });
+    bind('#memNote','input', e => { state.story.memory.authorNote = e.target.value; scheduleSave(); });
+    bind('#btnAddChapter','click', addChapterManual);
+    bind('#btnNudgeSummarize','click', summarizeOldTurns);
+    bind('#btnNudgeDismiss','click', (e) => {
+      state.ui.nudgeDismissedAt = parseInt(e.target.dataset.dropped) || 0;
+      render();
+    });
+    $$('[data-chapterdel]').forEach(b => b.onclick = () => removeChapter(b.dataset.chapterdel));
+    $$('[data-chapterfield]').forEach(inp => inp.addEventListener('input', e => {
+      updateChapter(e.target.dataset.chapterid2, e.target.dataset.chapterfield, e.target.value);
+    }));
+    bind('#memSecrets','input', e => { state.story.memory.secrets = e.target.value; scheduleSave(); });
+    bind('#btnSummarize','click', summarizeOldTurns);
+    $$('[data-addtype]').forEach(b => b.onclick = () => addCard(b.dataset.addtype));
+    $$('[data-cdel]').forEach(b => b.onclick = () => { const [t,id] = b.dataset.cdel.split(':'); removeCard(t,id); });
+    $$('[data-cdup]').forEach(b => b.onclick = () => { const [t,id] = b.dataset.cdup.split(':'); duplicateCard(t,id); });
+    $$('[data-ctoggle]').forEach(b => b.onclick = () => toggleCollapsed(b.dataset.ctoggle));
+    $$('[data-secttoggle]').forEach(h => h.onclick = () => toggleCollapsed('sect:' + h.dataset.secttoggle));
+    $$('[data-cfield]').forEach(inp => inp.addEventListener('input', e => {
+      updateCard(e.target.dataset.ctype, e.target.dataset.cid, e.target.dataset.cfield, e.target.value);
+    }));
+    $$('[data-cprotag]').forEach(chk => chk.addEventListener('change', e => {
+      updateCard('char', e.target.dataset.cprotag, 'isProtagonist', e.target.checked);
+      render();
+    }));
+    $$('[data-alwayson]').forEach(chk => chk.addEventListener('change', e => {
+      const [t, id] = e.target.dataset.alwayson.split(':');
+      updateCard(t, id, 'alwaysOn', e.target.checked);
+      render();
+    }));
+
+    bind('#composer','input', e => {
+      state.ui.composerText = e.target.value;
+      updateTokenEstimateDisplay();
+    });
+    bind('#composer','keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); sendAction(); }
+    });
+    bind('#btnSend','click', sendAction);
+    bind('#btnContinue','click', continueStory);
+    bind('#btnRetry','click', () => retryLast());
+    bind('#btnUndo','click', undoLast);
+    bind('#btnRedo','click', redoLast);
+    bind('#btnErase','click', eraseLast);
+    bind('#btnRetryOptions','click', () => { state.ui.retryGuidanceOpen = !state.ui.retryGuidanceOpen; render(); });
+    bind('#btnRetryGo','click', () => {
+      const input = document.getElementById('retryGuidanceInput');
+      const guidance = input ? input.value.trim() : '';
+      state.ui.retryGuidanceText = guidance;
+      retryLast(guidance || undefined);
+    });
+    bind('#btnRetryCancel','click', () => { state.ui.retryGuidanceOpen = false; render(); });
+    $$('[data-altnav]').forEach(b => b.onclick = () => {
+      const [turnId, dir] = b.dataset.altnav.split(':');
+      cycleAlt(turnId, parseInt(dir));
+    });
+
+    $$('.spine .tab').forEach(t => t.onclick = () => rewindTo(t.dataset.jump));
+    $$('[data-turntap]').forEach(el => el.addEventListener('click', (e) => {
+      if (e.target.closest('.actions')) return; // clique foi num botão de ação, não no texto em si
+      const id = el.dataset.turntap;
+      state.ui.openActionsFor = (state.ui.openActionsFor === id) ? null : id;
+      render();
+    }));
+    $$('[data-edit]').forEach(b => b.onclick = () => startEdit(b.dataset.edit));
+    $$('[data-cancel]').forEach(b => b.onclick = cancelEdit);
+    $$('[data-save]').forEach(b => b.onclick = () => {
+      const box = document.querySelector('[data-editbox="'+b.dataset.save+'"]');
+      saveEdit(b.dataset.save, box.value);
+    });
+    $$('[data-rewind]').forEach(b => b.onclick = () => rewindTo(b.dataset.rewind));
+    $$('[data-del]').forEach(b => b.onclick = () => deleteTurn(b.dataset.del));
+
+    // settings modal
+    bind('#closeSettings','click', () => { state.ui.modal = null; render(); });
+    bind('#overlaySettings','click', (e) => { if (e.target.id === 'overlaySettings'){ state.ui.modal = null; render(); } });
+    bind('#connMode','change', e => { state.connector.mode = e.target.value; render(); state.ui.modal = 'settings'; });
+    bind('#btnGoogleSignIn','click', signInWithGoogle);
+    bind('#btnGoogleSignOut','click', signOutGoogle);
+    bind('#saveSettings','click', async () => {
+      const c = state.connector;
+      const g = id => { const e = document.getElementById(id); return e ? e.value : undefined; };
+      if (c.mode === 'horde'){
+        c.hordeKey = g('hordeKey') || '0000000000';
+        c.hordeNsfw = !!document.getElementById('hordeNsfw').checked;
+        c.hordeModels = g('hordeModels') || '';
+      } else if (c.mode === 'openai'){
+        c.oaEndpoint = g('oaEndpoint') || '';
+        c.oaKey = g('oaKey') || '';
+        c.oaModel = g('oaModel') || '';
+      }
+      c.maxLength = parseInt(g('maxLength')) || 220;
+      c.temperature = parseFloat(g('temperature')) || 0.85;
+      c.historyTokenBudget = parseInt(g('historyTokenBudget')) || 3000;
+      c.maxHistoryTurns = parseInt(g('maxHistoryTurns')) || 40;
+      c.cardsTokenBudget = parseInt(g('cardsTokenBudget')) || 1200;
+      c.debugMode = !!document.getElementById('debugMode').checked;
+      await sSet('settings:connector', c);
+      state.ui.modal = null;
+      updateStatus('Configurações salvas.', false);
+      render();
+    });
+
+    // stories modal
+    bind('#closeStories','click', () => { state.ui.modal = null; render(); });
+    bind('#overlayStories','click', (e) => { if (e.target.id === 'overlayStories'){ state.ui.modal = null; render(); } });
+    bind('#btnCreateStory','click', createStory);
+    bind('#btnExportStory','click', exportStory);
+    bind('#btnImportTrigger','click', () => document.getElementById('importInput').click());
+    bind('#importInput','change', e => { if (e.target.files[0]) importStory(e.target.files[0]); });
+    $$('[data-open]').forEach(b => b.onclick = () => { loadStory(b.dataset.open); state.ui.modal = null; });
+    $$('[data-delstory]').forEach(b => b.onclick = () => deleteStory(b.dataset.delstory));
+  }
+
+  init();
+  attemptSilentGoogleSignIn();
+})();
+</script>
+</body>
+</html>

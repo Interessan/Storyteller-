@@ -1114,10 +1114,11 @@
   }
 
   async function sendAction(){
-    const text = state.ui.composerText.trim();
+    const raw = state.ui.composerText;
+    const text = raw.trim();
     if (!text || state.ui.generating) return;
     const s = state.story;
-    s.turns.push({id: uid(), type:'user', text});
+    s.turns.push({id: uid(), type:'user', text: raw});
     state.ui.composerText = '';
     state.ui.generating = true;
     updateStatus('Escrevendo a próxima cena…', false);
@@ -1732,7 +1733,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v24</strong>
+          Versão do app: <strong>v25</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

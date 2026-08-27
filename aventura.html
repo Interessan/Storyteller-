@@ -848,9 +848,10 @@
         '\nRegra importante: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história. Não as revele na narração até que a trama naturalmente leve a essa descoberta.'
       ) : '',
       'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores. Nunca faça um personagem (incluindo o protagonista) reagir a uma informação que ele não teve como obter ainda.',
+      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele, mesmo que isso contrarie o que a protagonista (ou o jogador) esperava que acontecesse. Não convenha um personagem a ceder, concordar ou mudar de comportamento só porque seria conveniente pra cena — resistência, teimosia, desconfiança ou indiferença de um personagem são válidas e devem se manter até que algo na história realmente as justifique a mudar.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
-      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos nem nenhuma marcação — só prosa corrida. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
+      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos nem nenhuma marcação — só prosa corrida. Os outros personagens reagem com a PRÓPRIA personalidade, não com o que a protagonista espera deles, e não sabem de nada que não tenham visto ou ouvido de fato. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
     const messages = [{role:'system', content: sys}];
@@ -1731,7 +1732,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v23</strong>
+          Versão do app: <strong>v24</strong>
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

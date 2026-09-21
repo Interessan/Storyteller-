@@ -165,7 +165,6 @@
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
 
-  /* cards no drawer — versão compacta (só preview, edição pelo modal) */
   .card-preview{
     background:var(--panel-2);
     border:1px solid var(--border);
@@ -367,7 +366,6 @@
     margin-top: 6px;
   }
 
-  /* modal em tela cheia pra editar uma ficha */
   .card-modal-overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.78); backdrop-filter:blur(8px);
     display:flex; align-items:center; justify-content:center; z-index:120; padding:20px;
@@ -1459,7 +1457,6 @@
   function addCard(type){
     const c = blankCard(type);
     cardCollection(type).push(c);
-    // abre direto o modal de edição da nova ficha
     state.ui.expandedCard = {type, id: c.id};
     scheduleSave();
     render();
@@ -1477,6 +1474,12 @@
   }
   function removeCard(type, id){
     const list = cardCollection(type);
+    const card = list.find(x => x.id === id);
+    if (!card) return;
+    const typeLabel = type === 'char' ? 'personagem' : type === 'loc' ? 'local' : 'grupo';
+    const nameLabel = card.name ? '"' + card.name + '"' : '(sem nome)';
+    const ok = window.confirm('Apagar o ' + typeLabel + ' ' + nameLabel + '?\n\nEssa ação não pode ser desfeita.');
+    if (!ok) return;
     if (type === 'char') state.story.memory.characters = list.filter(c => c.id !== id);
     if (type === 'loc') state.story.memory.locations = list.filter(c => c.id !== id);
     if (type === 'group') state.story.memory.groups = list.filter(c => c.id !== id);
@@ -1521,7 +1524,6 @@
     render();
   }
 
-  // pega a linha de preview da ficha pra mostrar no card compacto
   function getCardPreview(type, c){
     let raw = '';
     if (type === 'char') raw = c.desc || c.personality || c.appearance || c.relations || '';
@@ -1532,7 +1534,6 @@
     return raw;
   }
 
-  // card compacto do drawer — só nome + preview, clique abre o modal
   function renderCardPreview(type, c){
     const preview = getCardPreview(type, c);
     const badge = (type === 'char' && c.isProtagonist) ? '<span class="protag-badge">protagonista</span>' : '';
@@ -2002,7 +2003,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v30</strong> (fichas compactas + edição por modal)
+          Versão do app: <strong>v31</strong> (confirmação ao apagar ficha)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -2185,7 +2186,6 @@
 
     $$('[data-addtype]').forEach(b => b.onclick = () => addCard(b.dataset.addtype));
 
-    // clique no card de preview abre o modal (a não ser que o clique seja num botão interno)
     $$('[data-cexpand]').forEach(el => el.addEventListener('click', (e) => {
       if (e.target.closest('[data-cdup], [data-cdel]')) return;
       const [t, id] = el.dataset.cexpand.split(':');

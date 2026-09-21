@@ -46,7 +46,6 @@
   .mono{font-family:'Inter', system-ui, sans-serif; font-size:11px; letter-spacing:.02em;}
   .display{font-family:'Newsreader', serif;}
 
-  /* header — pílulas de navegação flutuando sobre o fundo */
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 22px;
@@ -84,7 +83,6 @@
   button:disabled{ opacity:.4; cursor:default; }
   button.icon{ padding:9px 12px; border-radius:999px; }
 
-  /* layout */
   .layout{
     display:grid;
     grid-template-columns: 1fr 46px;
@@ -105,7 +103,6 @@
   #app.force-desktop .spine{ display:flex !important; }
   .layout-toggle{ font-size:10px !important; padding:7px 10px !important; }
 
-  /* memory panel */
   .layout > *{ min-width:0; }
   .drawer-backdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:40;
@@ -132,9 +129,7 @@
     margin:0 0 6px; display:flex; align-items:center; gap:7px; user-select:none;
     border-bottom:1px solid var(--border-soft); padding-bottom:8px;
   }
-  .memory-panel h2 .chevron{ font-size:11px; opacity:.6; margin-left:auto; font-family:'Inter', sans-serif; }
 
-  /* abas do painel de memória */
   .mem-tabs{
     display:flex; gap:4px; padding-bottom:10px; margin-bottom:2px;
     border-bottom:1px solid var(--border-soft);
@@ -170,7 +165,54 @@
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
 
-  /* main / feed — texto puro sobre o fundo escuro, como o modo leitura */
+  /* cards no drawer — versão compacta (só preview, edição pelo modal) */
+  .card-preview{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:11px 13px;
+    margin-bottom:7px;
+    cursor:pointer;
+    transition: background .15s, border-color .15s, transform .08s;
+    user-select:none;
+  }
+  .card-preview:hover{
+    background:rgba(255,255,255,0.055);
+    border-color:rgba(255,255,255,0.18);
+  }
+  .card-preview:active{ transform:scale(0.995); }
+  .card-preview-head{
+    display:flex; align-items:center; gap:8px; margin-bottom:5px;
+  }
+  .card-preview-name{
+    font-family:'Newsreader', serif; font-size:16px; font-weight:500;
+    color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    min-width:0;
+  }
+  .card-preview-body{
+    font-family:'Newsreader', serif; font-size:14px; line-height:1.5;
+    color:var(--muted);
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .card-preview-empty{ font-style:italic; opacity:.55; }
+  .card-preview-actions{
+    display:flex; gap:2px; flex-shrink:0;
+  }
+  .card-preview-action{
+    padding:4px 8px !important; font-size:11px !important;
+    opacity:.45;
+    background:transparent !important;
+    border-color:transparent !important;
+    backdrop-filter:none !important;
+  }
+  .card-preview-action:hover{ opacity:1; background:rgba(255,255,255,0.08) !important; }
+  .card-preview-del:hover{ color:#f0c9c2 !important; }
+
   main{ display:flex; flex-direction:column; min-width:0; min-height:0; }
   .feed{
     flex:1; overflow-y:auto; padding:34px 26px 40px;
@@ -254,7 +296,6 @@
   .status.err{ color:#f0c9c2; }
   .save-warning{ font-family:'Inter', sans-serif; font-size:11px; color:#f0c9c2; margin-right:6px; }
 
-  /* spine */
   .spine{
     background:transparent; border-left:1px solid var(--border-soft);
     display:flex; flex-direction:column; align-items:center; gap:5px; padding:12px 0; overflow-y:auto;
@@ -268,7 +309,6 @@
   .spine .tab.current{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
   .spine .tab:hover{ border-color: rgba(255,255,255,0.3); }
 
-  /* modal */
   .modal-overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter: blur(6px);
     display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;
@@ -300,14 +340,12 @@
   .char-card input[type=text]{ background:var(--ink); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Newsreader'; font-size:15px; padding:10px 11px; }
   .char-card textarea{ background:var(--ink); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Newsreader', serif; font-size:15px; line-height:1.5; padding:10px 11px; width:100%; resize:vertical; margin-top:6px; min-height:90px; }
   .ccard-top{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
-  .ccard-toggle{ padding:5px 8px; font-size:11px; flex-shrink:0; }
   .ccard-row2{ display:grid; grid-template-columns: 74px 1fr; gap:6px; margin-bottom:6px; }
   .ccard-row2 input{ width:100%; min-width:0; background:var(--ink); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Inter', sans-serif; font-size:12.5px; padding:9px 9px; }
   .protag-badge{ font-family:'Inter', sans-serif; font-size:10.5px; font-weight:600; color:var(--accent-ink); background:var(--accent); padding:3px 8px; border-radius:999px; flex-shrink:0; }
   .protag-check{ display:flex; align-items:center; gap:6px; font-family:'Inter', sans-serif; font-size:12.5px; color:var(--text-dim); margin-bottom:2px; }
   .add-card-btn{ font-family:'Inter', sans-serif !important; font-size:12.5px !important; }
 
-  /* bloco de voz da narração (só aparece pra protagonista) */
   .voice-block{
     background: rgba(239,236,228,0.055);
     border: 1px solid rgba(239,236,228,0.18);
@@ -387,7 +425,7 @@
 <script>
 (function(){
 
-  // ---------- armazenamento: nativo (Claude) | Google Drive | local ----------
+  // ---------- armazenamento ----------
   function backend(){
     if (state.drive && state.drive.signedIn) return 'drive';
     if (typeof window.storage !== 'undefined' && window.storage) return 'native';
@@ -443,7 +481,7 @@
     try{ localStorage.removeItem('aventura:' + key); }catch(e){}
   }
 
-  // ---------- Google Drive (appDataFolder) ----------
+  // ---------- Google Drive ----------
   function loadSavedClientId(){
     try{ return localStorage.getItem('aventura:googleClientId') || ''; }catch(e){ return ''; }
   }
@@ -621,15 +659,14 @@
       loaded: false
     },
     ui: {
-      modal: null,             // null | 'settings' | 'stories'
+      modal: null,
       generating: false,
       statusMsg: '',
       statusErr: false,
       composerText: '',
-      collapsed: new Set(),
       memoryPanelOpen: false,
-      memoryTab: 'memory',     // 'memory' | 'chars' | 'locs' | 'groups' | 'secrets'
-      expandedCard: null,      // {type:'char'|'loc'|'group', id:'xxx'}
+      memoryTab: 'memory',
+      expandedCard: null,
       lastDebug: null,
       forcedLayout: (function(){ try{ return localStorage.getItem('aventura:forcedLayout') || 'auto'; }catch(e){ return 'auto'; } })(),
       openActionsFor: null,
@@ -1420,7 +1457,10 @@
     if (type === 'group') return {id: uid(), name:'', members:'', dynamic:'', alwaysOn:true, keywords:''};
   }
   function addCard(type){
-    cardCollection(type).push(blankCard(type));
+    const c = blankCard(type);
+    cardCollection(type).push(c);
+    // abre direto o modal de edição da nova ficha
+    state.ui.expandedCard = {type, id: c.id};
     scheduleSave();
     render();
   }
@@ -1472,13 +1512,6 @@
     render();
   }
 
-  function toggleCollapsed(key){
-    const set = state.ui.collapsed;
-    if (set.has(key)) set.delete(key); else set.add(key);
-    render();
-  }
-  function isCollapsed(key){ return state.ui.collapsed.has(key); }
-
   function openCardEditor(type, id){
     state.ui.expandedCard = {type, id};
     render();
@@ -1486,6 +1519,37 @@
   function closeCardEditor(){
     state.ui.expandedCard = null;
     render();
+  }
+
+  // pega a linha de preview da ficha pra mostrar no card compacto
+  function getCardPreview(type, c){
+    let raw = '';
+    if (type === 'char') raw = c.desc || c.personality || c.appearance || c.relations || '';
+    else if (type === 'loc') raw = c.desc || c.notes || '';
+    else raw = c.dynamic || c.members || '';
+    raw = (raw || '').replace(/\s+/g, ' ').trim();
+    if (raw.length > 140) raw = raw.slice(0, 137) + '…';
+    return raw;
+  }
+
+  // card compacto do drawer — só nome + preview, clique abre o modal
+  function renderCardPreview(type, c){
+    const preview = getCardPreview(type, c);
+    const badge = (type === 'char' && c.isProtagonist) ? '<span class="protag-badge">protagonista</span>' : '';
+    return `
+      <div class="card-preview" data-cexpand="${type}:${c.id}">
+        <div class="card-preview-head">
+          <div class="card-preview-name">${esc(c.name || 'Sem nome')}</div>
+          ${badge}
+          <span style="flex:1;"></span>
+          <div class="card-preview-actions">
+            <button class="icon card-preview-action" data-cdup="${type}:${c.id}" title="duplicar">⧉</button>
+            <button class="icon card-preview-action card-preview-del" data-cdel="${type}:${c.id}" title="apagar">✕</button>
+          </div>
+        </div>
+        ${preview ? `<div class="card-preview-body">${esc(preview)}</div>` : `<div class="card-preview-body card-preview-empty">Sem descrição — toque pra editar</div>`}
+      </div>
+    `;
   }
 
   async function createStory(){
@@ -1567,7 +1631,6 @@
     if (state.ui.forcedLayout === 'desktop') app.classList.add('force-desktop');
     if (!s){ app.innerHTML = '<div style="padding:40px;text-align:center;color:#9a9fb0;">Carregando…</div>'; return; }
 
-    // monta o feed com alternância de cor só nos turnos da IA
     let aiSeen = 0;
     const turnHtml = s.turns.map((t, i) => {
       const sep = (i > 0 && !/\s$/.test(s.turns[i-1].text || '') && !/^\s/.test(t.text || '')) ? ' ' : '';
@@ -1743,48 +1806,8 @@
     return `
       <div>
         <h2>Personagens</h2>
-        <div class="summ-note" style="margin-bottom:8px;">Cada ficha vale pra qualquer personagem — inclusive a protagonista. A IA só deixa alguém saber ou reagir ao que estiver escrito aqui + o que já rolou na história.</div>
-        ${s.memory.characters.map(c => {
-          const key = 'char:' + c.id;
-          const collapsed = isCollapsed(key);
-          return `
-          <div class="char-card" data-charid="${c.id}">
-            <div class="ccard-top">
-              <button class="ccard-toggle" data-ctoggle="${key}" title="expandir/recolher">${collapsed ? '▸' : '▾'}</button>
-              <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="name" value="${esc(c.name)}" placeholder="Nome" style="flex:1;">
-              ${c.isProtagonist ? '<span class="protag-badge">protagonista</span>' : ''}
-              <button class="icon" data-cexpand="char:${c.id}" title="editar em tela cheia">⤢</button>
-              <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
-              <button class="danger icon" data-cdel="${key}" title="apagar">✕</button>
-            </div>
-            ${collapsed ? '' : `
-              <div class="ccard-row2">
-                <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="age" value="${esc(c.age)}" placeholder="Idade">
-                <input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="origin" value="${esc(c.origin)}" placeholder="Origem/universo">
-              </div>
-              <label class="protag-check">
-                <input type="checkbox" data-cprotag="${c.id}" ${c.isProtagonist?'checked':''}> é a protagonista
-              </label>
-              <label class="protag-check" style="color:var(--muted);">
-                <input type="checkbox" data-alwayson="char:${c.id}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto
-              </label>
-              ${c.alwaysOn===false ? `<input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-bottom:6px;">` : ''}
-              ${c.isProtagonist ? `
-                <div class="voice-block">
-                  <div class="voice-title">🎭 Voz da narração</div>
-                  <div class="voice-hint">Como ela narra? Ritmo, vocabulário, manias, o jeito de olhar o mundo. É o que faz a narração soar como <strong>ela</strong>. Sem isso, todas as protagonistas soam iguais.</div>
-                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="narrativeVoice" rows="2" placeholder="ex: frases curtas e cortantes, ironia constante...">${esc(c.narrativeVoice)}</textarea>
-                  <textarea data-ctype="char" data-cid="${c.id}" data-cfield="voiceExample" rows="3" placeholder="2-3 frases de exemplo no tom dela.">${esc(c.voiceExample)}</textarea>
-                </div>
-              ` : ''}
-              <textarea data-ctype="char" data-cid="${c.id}" data-cfield="appearance" rows="2" placeholder="Aparência física...">${esc(c.appearance)}</textarea>
-              <textarea data-ctype="char" data-cid="${c.id}" data-cfield="personality" rows="2" placeholder="Personalidade...">${esc(c.personality)}</textarea>
-              <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relations" rows="2" placeholder="Relações/família...">${esc(c.relations)}</textarea>
-              <textarea data-ctype="char" data-cid="${c.id}" data-cfield="desc" rows="2" placeholder="Histórico, papel na história...">${esc(c.desc)}</textarea>
-              <textarea data-ctype="char" data-cid="${c.id}" data-cfield="knows" rows="2" placeholder="O que sabe até agora...">${esc(c.knows)}</textarea>
-            `}
-          </div>
-        `;}).join('')}
+        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar em tela cheia. A IA só deixa alguém saber ou reagir ao que estiver escrito aqui + o que já rolou na história.</div>
+        ${s.memory.characters.map(c => renderCardPreview('char', c)).join('')}
         <button data-addtype="char" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar personagem</button>
       </div>
     `;
@@ -1795,30 +1818,8 @@
     return `
       <div>
         <h2>Locais</h2>
-        <div class="summ-note" style="margin-bottom:8px;">Lugares importantes — ajuda a manter geografia e detalhes consistentes.</div>
-        ${s.memory.locations.map(l => {
-          const key = 'loc:' + l.id;
-          const collapsed = isCollapsed(key);
-          return `
-          <div class="char-card" data-locid="${l.id}">
-            <div class="ccard-top">
-              <button class="ccard-toggle" data-ctoggle="${key}">${collapsed ? '▸' : '▾'}</button>
-              <input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="name" value="${esc(l.name)}" placeholder="Nome do local" style="flex:1;">
-              <button class="icon" data-cexpand="loc:${l.id}" title="editar em tela cheia">⤢</button>
-              <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
-              <button class="danger icon" data-cdel="${key}" title="apagar">✕</button>
-            </div>
-            ${collapsed ? '' : `
-              <input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="origin" value="${esc(l.origin)}" placeholder="Origem/universo" style="margin-bottom:5px;">
-              <label class="protag-check" style="color:var(--muted);">
-                <input type="checkbox" data-alwayson="loc:${l.id}" ${l.alwaysOn!==false?'checked':''}> sempre incluir no contexto
-              </label>
-              ${l.alwaysOn===false ? `<input type="text" data-ctype="loc" data-cid="${l.id}" data-cfield="keywords" value="${esc(l.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-bottom:6px;">` : ''}
-              <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="desc" rows="2" placeholder="Como é esse lugar...">${esc(l.desc)}</textarea>
-              <textarea data-ctype="loc" data-cid="${l.id}" data-cfield="notes" rows="2" placeholder="Detalhes importantes...">${esc(l.notes)}</textarea>
-            `}
-          </div>
-        `;}).join('')}
+        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar em tela cheia. Ajuda a manter geografia e detalhes consistentes.</div>
+        ${s.memory.locations.map(l => renderCardPreview('loc', l)).join('')}
         <button data-addtype="loc" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar local</button>
       </div>
     `;
@@ -1829,29 +1830,8 @@
     return `
       <div>
         <h2>Grupos / famílias</h2>
-        <div class="summ-note" style="margin-bottom:8px;">Pra organizar uma família inteira ou facção — quem faz parte e como se tratam entre si.</div>
-        ${s.memory.groups.map(g => {
-          const key = 'group:' + g.id;
-          const collapsed = isCollapsed(key);
-          return `
-          <div class="char-card" data-groupid="${g.id}">
-            <div class="ccard-top">
-              <button class="ccard-toggle" data-ctoggle="${key}">${collapsed ? '▸' : '▾'}</button>
-              <input type="text" data-ctype="group" data-cid="${g.id}" data-cfield="name" value="${esc(g.name)}" placeholder="Nome do grupo/família" style="flex:1;">
-              <button class="icon" data-cexpand="group:${g.id}" title="editar em tela cheia">⤢</button>
-              <button class="icon" data-cdup="${key}" title="duplicar">⧉</button>
-              <button class="danger icon" data-cdel="${key}" title="apagar">✕</button>
-            </div>
-            ${collapsed ? '' : `
-              <label class="protag-check" style="color:var(--muted);">
-                <input type="checkbox" data-alwayson="group:${g.id}" ${g.alwaysOn!==false?'checked':''}> sempre incluir no contexto
-              </label>
-              ${g.alwaysOn===false ? `<input type="text" data-ctype="group" data-cid="${g.id}" data-cfield="keywords" value="${esc(g.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-bottom:6px;">` : ''}
-              <textarea data-ctype="group" data-cid="${g.id}" data-cfield="members" rows="2" placeholder="Quem faz parte (nomes)...">${esc(g.members)}</textarea>
-              <textarea data-ctype="group" data-cid="${g.id}" data-cfield="dynamic" rows="2" placeholder="Como se tratam, hierarquia, tensões...">${esc(g.dynamic)}</textarea>
-            `}
-          </div>
-        `;}).join('')}
+        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar. Pra organizar uma família inteira ou facção.</div>
+        ${s.memory.groups.map(g => renderCardPreview('group', g)).join('')}
         <button data-addtype="group" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar grupo/família</button>
       </div>
     `;
@@ -1877,7 +1857,6 @@
     const list = cardCollection(type);
     const c = list.find(x => x.id === id);
     if (!c){
-      // a ficha foi apagada — limpa o estado e sai
       state.ui.expandedCard = null;
       return '';
     }
@@ -1942,7 +1921,7 @@
     } else {
       body = `
         <label class="protag-check" style="margin:12px 0 4px; color:var(--muted);">
-          <input type="checkbox" data-alwayson="group:${g_id(c.id)}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto
+          <input type="checkbox" data-alwayson="group:${c.id}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto
         </label>
         ${c.alwaysOn===false ? `<input type="text" data-ctype="group" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-top:6px;">` : ''}
 
@@ -1975,7 +1954,6 @@
       </div>
     `;
   }
-  function g_id(id){ return id; }
 
   function autoSizeTextarea(el){
     el.style.height = 'auto';
@@ -2024,7 +2002,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v29</strong> (abas + modal de ficha + cores alternadas)
+          Versão do app: <strong>v30</strong> (fichas compactas + edição por modal)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -2184,7 +2162,6 @@
       render();
     };
 
-    // abas do painel de memória
     $$('[data-memtab]').forEach(b => b.onclick = () => {
       state.ui.memoryTab = b.dataset.memtab;
       render();
@@ -2207,13 +2184,17 @@
     }));
 
     $$('[data-addtype]').forEach(b => b.onclick = () => addCard(b.dataset.addtype));
-    $$('[data-cdel]').forEach(b => b.onclick = () => { const [t,id] = b.dataset.cdel.split(':'); removeCard(t,id); });
-    $$('[data-cdup]').forEach(b => b.onclick = () => { const [t,id] = b.dataset.cdup.split(':'); duplicateCard(t,id); });
-    $$('[data-ctoggle]').forEach(b => b.onclick = () => toggleCollapsed(b.dataset.ctoggle));
-    $$('[data-cexpand]').forEach(b => b.onclick = () => {
-      const [t, id] = b.dataset.cexpand.split(':');
+
+    // clique no card de preview abre o modal (a não ser que o clique seja num botão interno)
+    $$('[data-cexpand]').forEach(el => el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-cdup], [data-cdel]')) return;
+      const [t, id] = el.dataset.cexpand.split(':');
       openCardEditor(t, id);
-    });
+    }));
+
+    $$('[data-cdel]').forEach(b => b.onclick = (e) => { e.stopPropagation(); const [t,id] = b.dataset.cdel.split(':'); removeCard(t,id); });
+    $$('[data-cdup]').forEach(b => b.onclick = (e) => { e.stopPropagation(); const [t,id] = b.dataset.cdup.split(':'); duplicateCard(t,id); });
+
     $$('[data-cfield]').forEach(inp => inp.addEventListener('input', e => {
       updateCard(e.target.dataset.ctype, e.target.dataset.cid, e.target.dataset.cfield, e.target.value);
     }));
@@ -2227,7 +2208,6 @@
       render();
     }));
 
-    // modal de ficha em tela cheia
     const closeCardModalBtn = $('#closeCardModal');
     if (closeCardModalBtn) closeCardModalBtn.onclick = closeCardEditor;
     const closeCardModalFooterBtn = $('#closeCardModalFooter');
@@ -2279,7 +2259,6 @@
     $$('[data-rewind]').forEach(b => b.onclick = () => rewindTo(b.dataset.rewind));
     $$('[data-del]').forEach(b => b.onclick = () => deleteTurn(b.dataset.del));
 
-    // settings modal
     bind('#closeSettings','click', () => { state.ui.modal = null; render(); });
     bind('#overlaySettings','click', (e) => { if (e.target.id === 'overlaySettings'){ state.ui.modal = null; render(); } });
     bind('#connMode','change', e => { state.connector.mode = e.target.value; render(); state.ui.modal = 'settings'; });
@@ -2311,7 +2290,6 @@
       render();
     });
 
-    // stories modal
     bind('#closeStories','click', () => { state.ui.modal = null; render(); });
     bind('#overlayStories','click', (e) => { if (e.target.id === 'overlayStories'){ state.ui.modal = null; render(); } });
     bind('#btnCreateStory','click', createStory);

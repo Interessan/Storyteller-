@@ -435,7 +435,6 @@
     .card-modal h2{ font-size:19px; }
   }
 
-  /* painel de debug vetorial */
   .vector-debug-panel{
     margin-top: 10px; padding: 12px; border-radius: 12px;
     background: rgba(239,236,228,0.045);
@@ -631,6 +630,8 @@
           await ensureDriveLoaded();
           await init();
           updateStatus('Conectado ao Google Drive ✓ — os dados agora sincronizam por essa conta.', false);
+          // após reconectar, sincroniza vetores
+          if (state.story) syncVectorsWithDrive(state.story.id).catch(() => {});
         }catch(err){
           updateStatus('Erro ao carregar dados do Drive: ' + err.message, true);
         }
@@ -712,12 +713,12 @@
       summarizing: false,
       nudgeDismissedAt: 0,
       pendingSummary: null,
-      // vetorial
       vectorReady: false,
       vectorLoading: false,
       vectorError: null,
       vectorCount: 0,
-      vectorIndexing: 0,   // quantos faltam indexar
+      vectorIndexing: 0,
+      vectorDriveStatus: '',   // '⤴ enviando…', '⤵ baixando…', '✓ sincronizado', ''
       debugVector: { open: false, query: '', results: null, loading: false, error: null }
     }
   };
@@ -780,7 +781,7 @@
   }
 
   // ========================================================================
-  // =============  VECTOR MEMORY (RAG) — início  ============================
+  // =============  VECTOR MEMORY (RAG) + DRIVE SYNC — início  ==============
   // ========================================================================
   let _embedder = null;
   let _embedderPromise = null;
@@ -791,6 +792,11 @@
   const EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
   const VECTOR_SCORE_THRESHOLD = 0.35;
   const VECTOR_TOP_K = 5;
+  const VECTOR_DRIVE_VERSION = 1;
+  const VECTOR_DRIVE_PREFIX = 'aventura-vectors-';
+
+  let _vectorUploadTimer = null;
+  let _vectorUploadPending = false;
 
   async function waitForTransformers(timeout = 20000){
     if (window._transformers) return window._transformers;
@@ -816,7 +822,6 @@
         if (!tr || !tr.pipeline){
           throw new Error('Transformers.js não carregou (verifique a conexão).');
         }
-        // tenta WebGL primeiro, fallback pra wasm
         let pipe;
         try{
           pipe = await tr.pipeline('feature-extraction', EMBEDDING_MODEL, { device: 'webgl' });
@@ -861,18 +866,48 @@
     return Array.from(out.data);
   }
 
+  // hash simples e determinístico pra detectar mudanças no texto do turno
+  function textHash(str){
+    let h = 0;
+    for (let i = 0; i < str.length; i++){
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  // ---- serialização compacta de vetores (Float32Array -> base64) ----
+  function encodeVector(arr){
+    const f32 = new Float32Array(arr);
+    const bytes = new Uint8Array(f32.buffer);
+    let bin = '';
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk){
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+  function decodeVector(b64){
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const f32 = new Float32Array(bytes.buffer);
+    return Array.from(f32);
+  }
+
   async function saveTurnVector(turn){
     if (!turn || !turn.text || turn.text.trim().length < 3) return;
     try{
       const vector = await embedText(turn.text);
       const db = await openVectorDb();
-      return new Promise((resolve, reject) => {
+      await new Promise((resolve, reject) => {
         const tx = db.transaction(VECTOR_STORE, 'readwrite');
         tx.objectStore(VECTOR_STORE).put({
           turnId: turn.id,
           storyId: state.story ? state.story.id : null,
           type: turn.type,
           text: turn.text,
+          hash: textHash(turn.text),
           archived: !!turn.archived,
           vector,
           updatedAt: Date.now()
@@ -880,6 +915,7 @@
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
+      scheduleVectorDriveUpload();
     }catch(e){
       console.warn('saveTurnVector failed:', e);
     }
@@ -888,12 +924,13 @@
   async function removeTurnVector(turnId){
     try{
       const db = await openVectorDb();
-      return new Promise((resolve) => {
+      await new Promise((resolve) => {
         const tx = db.transaction(VECTOR_STORE, 'readwrite');
         tx.objectStore(VECTOR_STORE).delete(turnId);
         tx.oncomplete = () => resolve();
         tx.onerror = () => resolve();
       });
+      scheduleVectorDriveUpload();
     }catch(e){ /* silencioso */ }
   }
 
@@ -959,45 +996,280 @@
     }catch(e){ return 0; }
   }
 
-  // Sincroniza os vetores com a história atual:
-  // - remove vetores órfãos (turnos apagados)
-  // - gera vetores faltantes pros turnos atuais
-  // Roda em background, sem bloquear a UI
-  async function syncStoryVectors(){
+  // ---- metadados de sync guardados em localStorage (por história) ----
+  function getSyncMeta(storyId){
+    try{
+      const raw = localStorage.getItem('aventura:vectorSync:' + storyId);
+      return raw ? JSON.parse(raw) : { lastPushedAt: 0, lastPulledAt: 0 };
+    }catch(e){ return { lastPushedAt: 0, lastPulledAt: 0 }; }
+  }
+  function setSyncMeta(storyId, meta){
+    try{ localStorage.setItem('aventura:vectorSync:' + storyId, JSON.stringify(meta)); }catch(e){}
+  }
+
+  // ---- Drive: arquivo de vetores por história ----
+  async function driveFindVectorFile(storyId){
+    const name = VECTOR_DRIVE_PREFIX + storyId + '.json';
+    const q = encodeURIComponent("name='" + name + "'");
+    const res = await driveFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=' + q + '&fields=files(id,name,modifiedTime)');
+    if (!res.ok) throw new Error('Falha ao procurar vetores no Drive (' + res.status + ')');
+    const data = await res.json();
+    return (data.files && data.files[0]) ? data.files[0] : null;
+  }
+
+  async function driveCreateVectorFile(storyId, initialContent){
+    const name = VECTOR_DRIVE_PREFIX + storyId + '.json';
+    const boundary = 'aventura_vec_' + uid();
+    const metadata = { name, parents: ['appDataFolder'] };
+    const body =
+      '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+      '--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + JSON.stringify(initialContent) + '\r\n' +
+      '--' + boundary + '--';
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method:'POST',
+      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body
+    });
+    if (!res.ok) throw new Error('Falha ao criar vetores no Drive (' + res.status + ')');
+    const data = await res.json();
+    return data.id;
+  }
+
+  async function driveReadVectorFile(fileId){
+    const res = await driveFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
+    if (!res.ok) throw new Error('Falha ao ler vetores do Drive (' + res.status + ')');
+    const text = await res.text();
+    try{ return text ? JSON.parse(text) : null; }catch(e){ return null; }
+  }
+
+  async function driveWriteVectorFile(fileId, content){
+    const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
+      method:'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(content)
+    });
+    if (!res.ok) throw new Error('Falha ao salvar vetores no Drive (' + res.status + ')');
+  }
+
+  // ---- upload: pega vetores locais da história atual, serializa e envia ----
+  async function uploadVectorsToDrive(){
+    if (!state.drive.signedIn || !state.story) return;
+    const storyId = state.story.id;
+    try{
+      state.ui.vectorDriveStatus = '⤴ enviando vetores…';
+      render();
+
+      const db = await openVectorDb();
+      const items = await new Promise((resolve) => {
+        const tx = db.transaction(VECTOR_STORE, 'readonly');
+        const idx = tx.objectStore(VECTOR_STORE).index('storyId');
+        const req = idx.getAll(storyId);
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+
+      if (!items.length){
+        state.ui.vectorDriveStatus = '';
+        render();
+        return;
+      }
+
+      // serializa compacto
+      const payload = {
+        version: VECTOR_DRIVE_VERSION,
+        model: EMBEDDING_MODEL,
+        dim: items[0].vector.length,
+        storyId,
+        updatedAt: Date.now(),
+        vectors: items.map(it => ({
+          i: it.turnId,
+          t: it.type,
+          h: it.hash || textHash(it.text || ''),
+          a: !!it.archived,
+          v: encodeVector(it.vector)
+        }))
+      };
+
+      // acha ou cria o arquivo
+      let file = await driveFindVectorFile(storyId);
+      let fileId;
+      if (file){
+        fileId = file.id;
+        await driveWriteVectorFile(fileId, payload);
+      } else {
+        fileId = await driveCreateVectorFile(storyId, payload);
+      }
+
+      const meta = getSyncMeta(storyId);
+      meta.lastPushedAt = Date.now();
+      setSyncMeta(storyId, meta);
+
+      state.ui.vectorDriveStatus = '✓ vetores salvos no Drive';
+      render();
+      setTimeout(() => {
+        if (state.ui.vectorDriveStatus === '✓ vetores salvos no Drive'){
+          state.ui.vectorDriveStatus = '';
+          render();
+        }
+      }, 3000);
+    }catch(err){
+      console.warn('uploadVectorsToDrive failed:', err);
+      state.ui.vectorDriveStatus = '⚠ falha ao enviar vetores';
+      render();
+      setTimeout(() => {
+        state.ui.vectorDriveStatus = '';
+        render();
+      }, 5000);
+    }
+  }
+
+  function scheduleVectorDriveUpload(){
+    if (!state.drive.signedIn) return;
+    _vectorUploadPending = true;
+    clearTimeout(_vectorUploadTimer);
+    _vectorUploadTimer = setTimeout(async () => {
+      if (_vectorUploadPending){
+        _vectorUploadPending = false;
+        await uploadVectorsToDrive();
+      }
+    }, 30000); // 30s de debounce — agrupa vários turnos num único upload
+  }
+
+  // ---- download: traz vetores do Drive e popula IndexedDB ----
+  async function downloadVectorsFromDrive(storyId){
+    if (!state.drive.signedIn) return false;
+    try{
+      state.ui.vectorDriveStatus = '⤵ baixando vetores…';
+      render();
+
+      const file = await driveFindVectorFile(storyId);
+      if (!file){
+        state.ui.vectorDriveStatus = '';
+        render();
+        return false;
+      }
+
+      const payload = await driveReadVectorFile(file.id);
+      if (!payload || payload.version !== VECTOR_DRIVE_VERSION){
+        state.ui.vectorDriveStatus = '';
+        render();
+        return false;
+      }
+      // se o modelo mudou, não aproveita — regenera
+      if (payload.model !== EMBEDDING_MODEL){
+        state.ui.vectorDriveStatus = '';
+        render();
+        return false;
+      }
+
+      const meta = getSyncMeta(storyId);
+      if (meta.lastPulledAt && payload.updatedAt && payload.updatedAt <= meta.lastPulledAt){
+        state.ui.vectorDriveStatus = '';
+        render();
+        return false; // nada novo desde o último pull
+      }
+
+      // insere todos num único batch
+      const db = await openVectorDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(VECTOR_STORE, 'readwrite');
+        const store = tx.objectStore(VECTOR_STORE);
+        payload.vectors.forEach(v => {
+          store.put({
+            turnId: v.i,
+            storyId: payload.storyId,
+            type: v.t,
+            hash: v.h,
+            archived: !!v.a,
+            text: '', // texto não é guardado no arquivo remoto (economiza espaço)
+            vector: decodeVector(v.v),
+            updatedAt: Date.now()
+          });
+        });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+
+      meta.lastPulledAt = Date.now();
+      setSyncMeta(storyId, meta);
+
+      state.ui.vectorCount = await countVectors();
+      state.ui.vectorDriveStatus = '✓ vetores sincronizados do Drive';
+      render();
+      setTimeout(() => {
+        if (state.ui.vectorDriveStatus === '✓ vetores sincronizados do Drive'){
+          state.ui.vectorDriveStatus = '';
+          render();
+        }
+      }, 3000);
+      return true;
+    }catch(err){
+      console.warn('downloadVectorsFromDrive failed:', err);
+      state.ui.vectorDriveStatus = '⚠ falha ao baixar vetores';
+      render();
+      setTimeout(() => {
+        state.ui.vectorDriveStatus = '';
+        render();
+      }, 5000);
+      return false;
+    }
+  }
+
+  // Orquestrador: chamado ao carregar uma história.
+  // Primeiro tenta baixar do Drive; se não houver nada novo lá, sincroniza localmente.
+  async function syncVectorsWithDrive(storyId){
+    if (!state.drive.signedIn) return;
+    // baixa o que tiver do Drive (rápido se não houver nada novo)
+    const downloaded = await downloadVectorsFromDrive(storyId);
+    // se baixou, não precisa indexar tudo localmente
+    if (!downloaded){
+      await syncStoryVectors();
+    } else {
+      // ainda valida que o local bate com o Drive (indexa turnos novos criados offline)
+      await syncStoryVectors({ skipExisting: true });
+    }
+  }
+
+  // Sincronização local: remove órfãos e gera vetores faltantes dos turnos atuais
+  async function syncStoryVectors(opts){
+    opts = opts || {};
     const s = state.story;
     if (!s) return;
     try{
       const db = await openVectorDb();
       const existingIds = await new Promise((resolve) => {
         const tx = db.transaction(VECTOR_STORE, 'readonly');
-        const req = tx.objectStore(VECTOR_STORE).getAllKeys();
-        req.onsuccess = () => resolve(new Set(req.result));
+        const idx = tx.objectStore(VECTOR_STORE).index('storyId');
+        const req = idx.getAll(s.id);
+        req.onsuccess = () => resolve(new Set((req.result || []).map(it => it.turnId)));
         req.onerror = () => resolve(new Set());
       });
 
       const currentIds = new Set(s.turns.map(t => t.id));
-
       // remove órfãos
+      const toRemove = [];
       for (const id of existingIds){
-        if (!currentIds.has(id)){
-          await removeTurnVector(id);
-        }
+        if (!currentIds.has(id)) toRemove.push(id);
+      }
+      if (toRemove.length){
+        const tx = db.transaction(VECTOR_STORE, 'readwrite');
+        toRemove.forEach(id => tx.objectStore(VECTOR_STORE).delete(id));
       }
 
-      // gera faltantes
       const missing = s.turns.filter(t => !existingIds.has(t.id));
       state.ui.vectorIndexing = missing.length;
-      if (missing.length){
-        render(); // mostra status
-      }
+      if (missing.length) render();
+
       for (let i = 0; i < missing.length; i++){
         await saveTurnVector(missing[i]);
-        // Atualiza contador a cada 10 turnos pra não spammar renders
-        if (i % 10 === 0){
+        if (i % 5 === 0){
           state.ui.vectorIndexing = missing.length - i - 1;
           render();
+          // cede o thread pro navegador respirar (importante no celular)
+          await new Promise(r => setTimeout(r, 0));
         }
       }
+
       state.ui.vectorIndexing = 0;
       state.ui.vectorCount = await countVectors();
       render();
@@ -1006,9 +1278,8 @@
       state.ui.vectorIndexing = 0;
     }
   }
-
   // ========================================================================
-  // =============  VECTOR MEMORY (RAG) — fim  ==============================
+  // =============  VECTOR MEMORY (RAG) + DRIVE SYNC — fim  =================
   // ========================================================================
 
   async function init(){
@@ -1104,7 +1375,10 @@
     scrollFeedToBottom();
     // sincroniza vetores em background
     if (window.indexedDB){
-      syncStoryVectors().catch(e => console.warn('Sync vetorial falhou:', e));
+      // espera um pouco pro render inicial terminar
+      setTimeout(() => {
+        syncVectorsWithDrive(id).catch(e => console.warn('Sync vetorial falhou:', e));
+      }, 800);
     }
   }
 
@@ -1240,7 +1514,6 @@
     return 'RESUMO DOS CAPÍTULOS ANTERIORES (na ordem em que aconteceram):\n' + lines.join('\n\n');
   }
 
-  // monta o bloco de trechos relevantes trazidos pela busca vetorial
   function buildVectorMemoryBlock(memories){
     if (!memories || !memories.length) return '';
     const lines = memories.map((m, i) => {
@@ -1266,16 +1539,12 @@
       liveTurns, haystackLower, conn.cardsTokenBudget || 1200
     );
 
-    // ---- busca vetorial (RAG) ----
     let relevantMemories = [];
     if (!opts.skipRAG && _embedder){
       try{
-        // Busca combinando a ação atual + um pouco do contexto recente pra
-        // pegar memórias que façam sentido pro momento
         const recentTail = liveTurns.slice(-2).map(t => t.text).join(' ');
         const queryText = ((actionText || '') + ' ' + recentTail).slice(0, 800);
         relevantMemories = await searchRelevantTurns(queryText, { topK: VECTOR_TOP_K });
-        // exclui os que já estão no histórico recente (evita duplicação)
         const recentIds = new Set(liveTurns.map(t => t.id));
         relevantMemories = relevantMemories.filter(m => !recentIds.has(m.turnId));
       }catch(e){
@@ -1583,7 +1852,6 @@
     scheduleSave();
     updateStatus('Desfeito: ' + prev.label, false);
     render();
-    // Re-sincroniza vetores (turnos podem ter voltado)
     syncStoryVectors().catch(() => {});
   }
   function redoLast(){
@@ -1610,7 +1878,6 @@
     state.ui.generating = true;
     updateStatus('Escrevendo a próxima cena…', false);
     render();
-    // salva vetor do turno do jogador em background (fire-and-forget)
     if (_embedder){
       saveTurnVector(userTurn).catch(() => {});
     }
@@ -1620,7 +1887,6 @@
       s.turns.push(aiTurn);
       const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
       updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
-      // salva vetor do turno da IA
       if (_embedder){
         saveTurnVector(aiTurn).catch(() => {});
       }
@@ -1691,7 +1957,6 @@
       t.text = result.text;
       const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
       updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
-      // atualiza vetor do turno
       if (_embedder){
         saveTurnVector(t).catch(() => {});
       }
@@ -1712,7 +1977,6 @@
     t.text = t.alts[t.altIndex];
     scheduleSave();
     render();
-    // atualiza vetor com o novo texto
     if (_embedder){
       saveTurnVector(t).catch(() => {});
     }
@@ -2020,6 +2284,26 @@
     const ok = window.confirm('Apagar esta aventura pra sempre? Não dá pra desfazer.');
     if (!ok) return;
     await sDelete('story:' + id);
+    // apaga também o arquivo de vetores no Drive
+    if (state.drive.signedIn){
+      try{
+        const file = await driveFindVectorFile(id);
+        if (file){
+          await driveFetch('https://www.googleapis.com/drive/v3/files/' + file.id, { method: 'DELETE' });
+        }
+      }catch(e){ console.warn('falha ao apagar vetores do Drive:', e); }
+    }
+    // e limpa os vetores locais
+    try{
+      const db = await openVectorDb();
+      const tx = db.transaction(VECTOR_STORE, 'readwrite');
+      const idx = tx.objectStore(VECTOR_STORE).index('storyId');
+      const req = idx.openCursor(id);
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor){ cursor.delete(); cursor.continue(); }
+      };
+    }catch(e){}
     state.index = state.index.filter(s => s.id !== id);
     await sSet('stories:index', state.index);
     if (state.story && state.story.id === id){
@@ -2060,7 +2344,6 @@
         await sSet('settings:lastOpen', s.id);
         state.ui.modal = null;
         render();
-        // sincroniza vetores da história importada
         syncStoryVectors().catch(() => {});
       }catch(err){
         alert('Arquivo inválido.');
@@ -2096,9 +2379,10 @@
 
     const memTab = state.ui.memoryTab || 'memory';
 
-    // status de vetorial pro rodapé
     let vectorStatus = '';
-    if (state.ui.vectorLoading){
+    if (state.ui.vectorDriveStatus){
+      vectorStatus = state.ui.vectorDriveStatus;
+    } else if (state.ui.vectorLoading){
       vectorStatus = '🧠 Preparando memória vetorial… (primeira vez: baixando modelo ~120MB)';
     } else if (state.ui.vectorError){
       vectorStatus = '⚠ Memória vetorial indisponível: ' + state.ui.vectorError;
@@ -2531,13 +2815,18 @@
     else if (state.ui.vectorError) vectorStatusLabel = '⚠ erro: ' + state.ui.vectorError;
     else if (state.ui.vectorReady) vectorStatusLabel = '✓ pronta';
     else vectorStatusLabel = '— (inicializando)';
+
+    const syncMeta = state.story ? getSyncMeta(state.story.id) : null;
+    const lastPush = syncMeta && syncMeta.lastPushedAt ? new Date(syncMeta.lastPushedAt).toLocaleString('pt-BR') : 'nunca';
+    const lastPull = syncMeta && syncMeta.lastPulledAt ? new Date(syncMeta.lastPulledAt).toLocaleString('pt-BR') : 'nunca';
+
     return `
     <div class="modal-overlay" id="overlaySettings">
       <div class="modal">
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v33</strong> (memória vetorial / RAG)
+          Versão do app: <strong>v34</strong> (sync de vetores via Drive)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -2625,9 +2914,21 @@
           ${state.ui.vectorReady ? `<strong>Trechos indexados:</strong> ${state.ui.vectorCount || 0}` : ''}
           ${state.ui.vectorIndexing > 0 ? `<br><strong>Indexando…</strong> faltam ${state.ui.vectorIndexing}` : ''}
           <br><br>
+          <strong>Sincronização com Drive:</strong>
+          ${state.drive.signedIn ? `
+            <br>⤴ Último envio: ${esc(lastPush)}
+            <br>⤵ Último download: ${esc(lastPull)}
+          ` : `<br><em>entre com Google pra sincronizar</em>`}
+          <br><br>
           O modelo <code style="font-size:11px; color:var(--text);">paraphrase-multilingual-MiniLM-L12-v2</code> (~120MB)
-          baixa uma vez por navegador e fica cacheado. Depois disso, é invisível.
+          baixa uma vez por navegador. Depois, os vetores sincronizam via Drive automaticamente.
         </div>
+        ${state.drive.signedIn ? `
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <button id="btnForceVectorUpload" style="flex:1;">⤴ Enviar vetores agora</button>
+            <button id="btnForceVectorDownload" style="flex:1;">⤵ Baixar do Drive</button>
+          </div>
+        ` : ''}
         <button id="btnToggleVectorDebug" style="width:100%; margin-top:6px;">
           ${state.ui.debugVector.open ? '▲ Fechar teste' : '🔍 Testar busca vetorial'}
         </button>
@@ -2636,7 +2937,7 @@
         <div class="divider"></div>
         <h2>Sincronização (Google Drive)</h2>
         ${state.drive.signedIn ? `
-          <div class="helpbox">Conectado ✓ — seus dados sincronizam automaticamente por essa conta Google.</div>
+          <div class="helpbox">Conectado ✓ — seus dados e vetores sincronizam automaticamente por essa conta Google.</div>
           <button class="danger" id="btnGoogleSignOut" style="width:100%;">Sair da conta Google</button>
         ` : `
           <div class="field">
@@ -2696,7 +2997,6 @@
     const btnStories = $('#btnStories'); if (btnStories) btnStories.onclick = () => { state.ui.modal = 'stories'; render(); };
     const btnSettings = $('#btnSettings'); if (btnSettings) btnSettings.onclick = async () => {
       state.ui.modal = 'settings';
-      // atualiza contador de vetores quando abre
       state.ui.vectorCount = await countVectors();
       render();
     };
@@ -2846,6 +3146,24 @@
       render();
     });
 
+    // botões de sync vetorial forçado
+    bind('#btnForceVectorUpload','click', async () => {
+      updateStatus('Enviando vetores pro Drive…', false);
+      await uploadVectorsToDrive();
+    });
+    bind('#btnForceVectorDownload','click', async () => {
+      if (!state.story) return;
+      updateStatus('Baixando vetores do Drive…', false);
+      const ok = await downloadVectorsFromDrive(state.story.id);
+      if (ok){
+        state.ui.vectorCount = await countVectors();
+        updateStatus('Vetores sincronizados do Drive.', false);
+      } else {
+        updateStatus('Nada novo pra baixar (ou modelo mudou).', false);
+      }
+      render();
+    });
+
     // painel de debug vetorial
     bind('#btnToggleVectorDebug','click', () => {
       state.ui.debugVector.open = !state.ui.debugVector.open;
@@ -2904,13 +3222,16 @@
   init();
   attemptSilentGoogleSignIn();
 
-  // carrega o embedder em background, depois que a UI inicial montou
-  // (não bloqueia, não trava a primeira interação)
   setTimeout(() => {
     initEmbedder()
       .then(async () => {
         state.ui.vectorCount = await countVectors();
         render();
+        // após o embedder ficar pronto, se houver story e Drive conectado,
+        // tenta sincronizar vetores que possam ter ficado pendentes
+        if (state.story && state.drive.signedIn){
+          syncVectorsWithDrive(state.story.id).catch(() => {});
+        }
       })
       .catch(err => {
         console.warn('Falha ao inicializar embedder:', err);

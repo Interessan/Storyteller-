@@ -789,7 +789,8 @@
   const VECTOR_DB_NAME = 'aventura-vectors';
   const VECTOR_DB_VERSION = 1;
   const VECTOR_STORE = 'embeddings';
-  const EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+  const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && window.innerWidth < 900);
+  const EMBEDDING_MODEL = isMobileDevice ? 'Xenova/all-MiniLM-L6-v2' : 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
   const VECTOR_SCORE_THRESHOLD = 0.35;
   const VECTOR_TOP_K = 5;
   const VECTOR_DRIVE_VERSION = 1;
@@ -822,11 +823,21 @@
         if (!tr || !tr.pipeline){
           throw new Error('Transformers.js não carregou (verifique a conexão).');
         }
-        let pipe;
-        try{
-          pipe = await tr.pipeline('feature-extraction', EMBEDDING_MODEL, { device: 'webgl' });
-        }catch(e){
-          pipe = await tr.pipeline('feature-extraction', EMBEDDING_MODEL, { device: 'wasm' });
+                let pipe = null;
+        let lastErr = null;
+        const attempts = isMobileDevice ? ['wasm'] : ['webgl', 'wasm'];
+        for (const device of attempts){
+          try{
+            pipe = await tr.pipeline('feature-extraction', EMBEDDING_MODEL, { device });
+            break;
+          }catch(e){
+            lastErr = e;
+            console.warn('Falha com device ' + device + ':', e.message);
+            await new Promise(r => setTimeout(r, 500));
+          }
+        }
+        if (!pipe){
+          throw new Error('Modelo não iniciou. Erro: ' + (lastErr ? lastErr.message : 'desconhecido'));
         }
         _embedder = pipe;
         state.ui.vectorReady = true;

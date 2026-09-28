@@ -457,6 +457,36 @@
   .vector-result .vr-text{
     font-family:'Newsreader', serif; font-size:13.5px; color:var(--text); line-height:1.55;
   }
+
+    /* ===== Ajustes mobile: header e composer mais compactos ===== */
+  @media (max-width: 880px){
+    header{ padding: 8px 14px 6px; }
+    header .tag{ display: none; }
+    header h1{ font-size: 16px; }
+    header .btns{ gap: 4px; }
+    header .btns button.icon{ padding: 6px 9px; font-size: 12px; }
+    .feed{ padding: 14px 16px 16px; }
+    .empty-state{ margin: 24px auto; }
+    .empty-state h2{ font-size: 20px; }
+    .page{ font-size: 16.5px; line-height: 1.8; }
+    .composer{
+      padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .composer textarea{
+      padding: 9px 12px;
+      min-height: 40px;
+      font-size: 15px;
+    }
+    .token-estimate{ display: none; }
+    .dungeon-bar{ margin-top: 4px; gap: 4px; }
+    .dungeon-bar button{ padding: 7px 10px; font-size: 11px; }
+    .dungeon-bar-secondary{ margin-top: 3px; }
+    .dungeon-bar-secondary button{ padding: 5px 9px; font-size: 10.5px; }
+    .status{ font-size: 10.5px; }
+    .composer-row{ margin-top: 4px; }
+    .composer-row .primary{ padding: 9px 20px; font-size: 12.5px; }
+  }
+
 </style>
 </head>
 <body>

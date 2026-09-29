@@ -458,7 +458,7 @@
     font-family:'Newsreader', serif; font-size:13.5px; color:var(--text); line-height:1.55;
   }
 
-    /* ===== Ajustes mobile: header e composer mais compactos ===== */
+  /* ===== Ajustes mobile: header e composer mais compactos ===== */
   @media (max-width: 880px){
     header{ padding: 8px 14px 6px; }
     header .tag{ display: none; }
@@ -817,16 +817,12 @@
   const VECTOR_DB_NAME = 'aventura-vectors';
   const VECTOR_DB_VERSION = 1;
   const VECTOR_STORE = 'embeddings';
-  // Modelo ÚNICO para todos os dispositivos — garante compatibilidade total
-  // dos vetores entre PC, celular, tablet etc. (o que permite a sincronização)
   const EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
   const VECTOR_SCORE_THRESHOLD = 0.35;
   const VECTOR_TOP_K = 5;
   const VECTOR_DRIVE_VERSION = 1;
   const VECTOR_DRIVE_PREFIX = 'aventura-vectors-';
 
-  // Detecta se é mobile — usado APENAS pra escolher device (wasm vs webgl),
-  // NÃO pra escolher modelo (o modelo tem que ser o mesmo em todos os devices)
   const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
                          || (navigator.maxTouchPoints > 0 && window.innerWidth < 900);
 
@@ -857,7 +853,6 @@
         if (!tr || !tr.pipeline){
           throw new Error('Transformers.js não carregou (verifique a conexão).');
         }
-        // Em mobile, WebGL costuma falhar — vai direto pro WASM
         let pipe = null;
         let lastErr = null;
         const attempts = isMobileDevice ? ['wasm'] : ['webgl', 'wasm'];
@@ -1624,6 +1619,7 @@
       'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele, mesmo que isso contrarie o que a protagonista (ou o jogador) esperava que acontecesse. Não convenha um personagem a ceder, concordar ou mudar de comportamento só porque seria conveniente pra cena — resistência, teimosia, desconfiança ou indiferença de um personagem são válidas e devem se manter até que algo na história realmente as justifique a mudar.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
+      'REGRA CRÍTICA DE SAÍDA: responda APENAS com a narração em prosa. NÃO copie, repita ou parafraseie nenhuma instrução, lembrete, marcador de sistema ou texto entre colchetes que apareça no prompt. Se você vir "[Lembrete: ...]" ou algo parecido, isso NÃO faz parte da história — é uma instrução interna que você deve ignorar e nunca reproduzir.',
       'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos nem nenhuma marcação — só prosa corrida' + (voiceBlock ? ', E COM A VOZ DE ' + (protagName || 'A PROTAGONISTA').toUpperCase() + ' (vocabulário, ritmo e visão de mundo dela em cada frase — sem isso a imersão quebra)' : '') + '. Os outros personagens reagem com a PRÓPRIA personalidade, não com o que a protagonista espera deles, e não sabem de nada que não tenham visto ou ouvido de fato. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
@@ -1849,6 +1845,25 @@
     t = t.replace(/\*\*(.*?)\*\*/gs, '$1');
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
+    // Remove vazamentos do prompt (lembretes, marcadores, system prompts)
+    t = t.replace(/\[Lembrete:[^\]]*\]/gi, '');
+    t = t.replace(/\[Lembrete[^\]]*\]/gi, '');
+    t = t.replace(/Lembrete:\s*continue em primeira pessoa[^\n.]*/gi, '');
+    t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, '');
+    t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, '');
+    t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, '');
+    t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, '');
+    t = t.replace(/<\|[^|]*\|>/g, '');
+    t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
+    // Remove linhas que só contenham meta-instruções
+    t = t.split('\n').filter(line => {
+      const l = line.trim().toLowerCase();
+      if (!l) return true;
+      if (l.startsWith('[lembrete') || l.startsWith('lembrete:')) return false;
+      if (l.startsWith('[continue') || l.startsWith('(continue')) return false;
+      if (l === 'assistant:' || l === 'system:') return false;
+      return true;
+    }).join('\n');
     t = t.replace(/[ \t]{2,}/g, ' ').trim();
     if (cutOff){
       const enders = ['.', '!', '?', '…', '."', '!"', '?"', '.”', '!”', '?"'];
@@ -1857,7 +1872,17 @@
         const idx = t.lastIndexOf(e);
         if (idx > bestCut) bestCut = idx + e.length;
       });
-      if (bestCut > 20 && bestCut < t.length) t = t.slice(0, bestCut).trim();
+      if (bestCut > 20 && bestCut < t.length){
+        t = t.slice(0, bestCut).trim();
+      } else {
+        // não achou fim de frase — remove a última palavra incompleta
+        const lastSpace = t.lastIndexOf(' ');
+        if (lastSpace > t.length - 30 && lastSpace > 20){
+          t = t.slice(0, lastSpace).trim();
+        }
+        // se sobrar muito pouco, mantém o texto original (não vale a pena cortar)
+        if (t.length < 15) t = text.replace(/\*/g, '').trim();
+      }
     }
     return t;
   }
@@ -2854,7 +2879,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v35</strong> (modelo único + sync de vetores)
+          Versão do app: <strong>v36</strong> (anti-vazamento de prompt + corte melhorado)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">

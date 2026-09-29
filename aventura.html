@@ -17,15 +17,16 @@
 
 <style>
   :root{
-    --ink: #0a0a0b;
-    --panel: #17171a;
-    --panel-2: #1e1e22;
-    --border: rgba(255,255,255,0.09);
-    --border-soft: rgba(255,255,255,0.055);
-    --muted: #8a8a91;
-    --text: #e9e7e1;
-    --text-dim: #c7c5be;
-    --text-alt: #a8a59c;
+    /* tema clareado: fundo mais quente, menos preto absoluto */
+    --ink: #141416;
+    --panel: #1e1e22;
+    --panel-2: #26262b;
+    --border: rgba(255,255,255,0.10);
+    --border-soft: rgba(255,255,255,0.06);
+    --muted: #9a9aa2;
+    --text: #f0eee8;
+    --text-dim: #ccc9c1;
+    --text-alt: #b0ada3;
     --accent: #efece4;
     --accent-ink: #0e0e10;
     --danger: #c96a5c;
@@ -38,8 +39,8 @@
     font-family:'Newsreader', 'Georgia', serif;
     font-size:17px;
     background:
-      radial-gradient(ellipse 1200px 700px at 20% -10%, rgba(255,255,255,0.035), transparent 55%),
-      radial-gradient(ellipse 900px 600px at 100% 100%, rgba(255,255,255,0.02), transparent 55%),
+      radial-gradient(ellipse 1200px 700px at 20% -10%, rgba(255,255,255,0.045), transparent 55%),
+      radial-gradient(ellipse 900px 600px at 100% 100%, rgba(255,255,255,0.025), transparent 55%),
       var(--ink);
     color: var(--text);
     height:100vh;
@@ -55,7 +56,7 @@
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 22px;
-    background: linear-gradient(180deg, rgba(10,10,11,0.92), rgba(10,10,11,0));
+    background: linear-gradient(180deg, rgba(20,20,22,0.92), rgba(20,20,22,0));
     position:sticky; top:0; z-index:20;
   }
   header .titlewrap{display:flex; align-items:baseline; gap:10px; min-width:0;}
@@ -75,7 +76,7 @@
     backdrop-filter: blur(10px);
     transition: background .15s, border-color .15s, transform .1s;
   }
-  button:hover{ background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.16); }
+  button:hover{ background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.18); }
   button:active{ transform: scale(0.97); }
   button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   button.primary{
@@ -111,7 +112,7 @@
 
   .layout > *{ min-width:0; }
   .drawer-backdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:40;
+    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:40;
     opacity:0; pointer-events:none; transition:opacity .2s ease;
   }
   .drawer-backdrop.open{ opacity:1; pointer-events:auto; }
@@ -149,7 +150,7 @@
   }
   .mem-tab:hover{ background:rgba(255,255,255,0.06); color:var(--text); }
   .mem-tab.active{
-    background:rgba(255,255,255,0.11); border-color:var(--border); color:var(--text);
+    background:rgba(255,255,255,0.12); border-color:var(--border); color:var(--text);
   }
 
   .field label{
@@ -161,7 +162,7 @@
     color:var(--text); font-family:'Newsreader', serif; font-size:15.5px; line-height:1.55; padding:11px 12px; resize:vertical;
   }
   .field textarea{ min-height:110px; }
-  .field textarea:focus, .field input:focus{ outline:none; border-color: rgba(255,255,255,0.25); }
+  .field textarea:focus, .field input:focus{ outline:none; border-color: rgba(255,255,255,0.28); }
   .field{ margin-bottom:12px; }
   .summ-note{ font-family:'Inter', sans-serif; font-size:12px; color:var(--muted); line-height:1.5; }
   .nudge-banner{
@@ -183,7 +184,7 @@
     letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px;
   }
   .pending-summary textarea{
-    width:100%; background:rgba(10,10,11,0.65); border:1px solid var(--border);
+    width:100%; background:rgba(20,20,22,0.7); border:1px solid var(--border);
     border-radius:10px; color:var(--text); font-family:'Newsreader', serif;
     font-size:15px; line-height:1.6; padding:11px 12px; resize:vertical; min-height:100px;
   }
@@ -201,8 +202,8 @@
     user-select:none;
   }
   .card-preview:hover{
-    background:rgba(255,255,255,0.055);
-    border-color:rgba(255,255,255,0.18);
+    background:rgba(255,255,255,0.06);
+    border-color:rgba(255,255,255,0.2);
   }
   .card-preview:active{ transform:scale(0.995); }
   .card-preview-head{
@@ -249,7 +250,7 @@
   .turn.ai.ai-alt{ color:var(--text-alt); }
   .turn.user{ cursor:pointer; }
   .turn.archived{ opacity:.38; }
-  .turn.active-menu{ background:rgba(255,255,255,0.07); border-radius:3px; box-shadow:0 0 0 4px rgba(255,255,255,0.07); }
+  .turn.active-menu{ background:rgba(255,255,255,0.08); border-radius:3px; box-shadow:0 0 0 4px rgba(255,255,255,0.08); }
   .turn .actions{
     display:inline-flex; gap:5px; margin-left:6px; vertical-align:middle; cursor:default;
   }
@@ -263,16 +264,16 @@
   }
   .turn .actions button:hover{ background:rgba(255,255,255,0.14); }
   .turn-editbox{
-    display:block; width:100%; background:rgba(255,255,255,0.045); border:1px solid var(--border); border-radius:8px;
+    display:block; width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px;
     color:var(--text); font-family:'Newsreader', serif; font-size:17.5px; line-height:1.85; padding:10px 12px;
     resize:vertical; margin:6px 0; min-height:60px; overflow:hidden;
   }
-  .turn-editbox:focus{ outline:none; border-color: rgba(255,255,255,0.25); }
+  .turn-editbox:focus{ outline:none; border-color: rgba(255,255,255,0.28); }
   .empty-state{ max-width:520px; margin:80px auto; text-align:center; color:var(--muted); }
   .empty-state h2{ font-family:'Newsreader', serif; font-weight:500; font-size:23px; color:var(--text); }
 
   .composer{
-    padding:16px 26px 20px; background: linear-gradient(0deg, rgba(10,10,11,0.96), rgba(10,10,11,0));
+    padding:16px 26px 20px; background: linear-gradient(0deg, rgba(20,20,22,0.96), rgba(20,20,22,0));
   }
   .composer-inner{ max-width:740px; margin:0 auto; }
   .composer textarea{
@@ -280,7 +281,7 @@
     color:var(--text); font-family:'Newsreader', serif; font-size:16px; padding:13px 15px; resize:none;
     min-height:52px;
   }
-  .composer textarea:focus{ outline:none; border-color: rgba(255,255,255,0.25); }
+  .composer textarea:focus{ outline:none; border-color: rgba(255,255,255,0.28); }
   .composer-row{ display:flex; gap:8px; margin-top:9px; align-items:center; }
   .token-estimate{ font-size:10.5px; color:var(--muted); margin-top:5px; opacity:.8; }
   .dungeon-bar{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:10px; }
@@ -303,7 +304,7 @@
     flex:1; min-width:140px; background:var(--panel); border:1px solid var(--border); border-radius:999px;
     color:var(--text); font-family:'Newsreader', serif; font-size:15px; padding:10px 14px;
   }
-  .retry-guidance input:focus{ outline:none; border-color: rgba(255,255,255,0.25); }
+  .retry-guidance input:focus{ outline:none; border-color: rgba(255,255,255,0.28); }
   @media (max-width: 480px){
     .dungeon-bar button{ padding:10px 10px; font-size:11.5px; }
     .retry-group{ display:flex; }
@@ -325,12 +326,12 @@
     color:var(--muted); font-family:'Inter', sans-serif; font-size:10px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; flex-shrink:0;
   }
-  .spine .tab.ai{ border-color: rgba(255,255,255,0.18); }
+  .spine .tab.ai{ border-color: rgba(255,255,255,0.2); }
   .spine .tab.current{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
   .spine .tab:hover{ border-color: rgba(255,255,255,0.3); }
 
   .modal-overlay{
-    position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter: blur(6px);
+    position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter: blur(6px);
     display:flex; align-items:center; justify-content:center; z-index:100; padding:20px;
   }
   .modal{
@@ -367,8 +368,8 @@
   .add-card-btn{ font-family:'Inter', sans-serif !important; font-size:12.5px !important; }
 
   .voice-block{
-    background: rgba(239,236,228,0.055);
-    border: 1px solid rgba(239,236,228,0.18);
+    background: rgba(239,236,228,0.06);
+    border: 1px solid rgba(239,236,228,0.2);
     border-radius: 10px;
     padding: 10px 11px;
     margin: 8px 0;
@@ -382,13 +383,13 @@
     line-height:1.5; margin-bottom:7px;
   }
   .voice-block textarea{
-    background: rgba(10,10,11,0.6) !important;
-    border-color: rgba(239,236,228,0.15) !important;
+    background: rgba(20,20,22,0.65) !important;
+    border-color: rgba(239,236,228,0.18) !important;
     margin-top: 6px;
   }
 
   .card-modal-overlay{
-    position:fixed; inset:0; background:rgba(0,0,0,.78); backdrop-filter:blur(8px);
+    position:fixed; inset:0; background:rgba(0,0,0,.72); backdrop-filter:blur(8px);
     display:flex; align-items:center; justify-content:center; z-index:120; padding:20px;
   }
   .card-modal{
@@ -416,7 +417,7 @@
     padding:11px 13px; resize:vertical;
   }
   .card-modal textarea{ min-height:70px; line-height:1.65; }
-  .card-modal input:focus, .card-modal textarea:focus{ outline:none; border-color:rgba(255,255,255,0.25); }
+  .card-modal input:focus, .card-modal textarea:focus{ outline:none; border-color:rgba(255,255,255,0.28); }
   .card-modal .ccard-row2{
     display:grid; grid-template-columns: 100px 1fr; gap:10px; margin-bottom:6px;
   }
@@ -437,14 +438,14 @@
 
   .vector-debug-panel{
     margin-top: 10px; padding: 12px; border-radius: 12px;
-    background: rgba(239,236,228,0.045);
-    border: 1px solid rgba(239,236,228,0.16);
+    background: rgba(239,236,228,0.05);
+    border: 1px solid rgba(239,236,228,0.18);
   }
   .vector-debug-panel input[type=text]{
     width:100%; background:var(--ink); border:1px solid var(--border); border-radius:10px;
     color:var(--text); font-family:'Newsreader', serif; font-size:15px; padding:11px 13px;
   }
-  .vector-debug-panel input:focus{ outline:none; border-color:rgba(255,255,255,0.28); }
+  .vector-debug-panel input:focus{ outline:none; border-color:rgba(255,255,255,0.3); }
   .vector-result{
     background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
     padding:10px 12px; margin-top:7px;
@@ -458,6 +459,24 @@
     font-family:'Newsreader', serif; font-size:13.5px; color:var(--text); line-height:1.55;
   }
 
+  /* painel de debug da API */
+  .api-debug-panel{
+    margin-top: 10px; padding: 12px; border-radius: 12px;
+    background: rgba(239,236,228,0.05);
+    border: 1px solid rgba(239,236,228,0.18);
+  }
+  .api-debug-panel .adp-title{
+    font-family:'Inter', sans-serif; font-size:10.5px; color:var(--accent);
+    letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px;
+  }
+  .api-debug-panel pre{
+    background:var(--ink); border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; margin:8px 0 0;
+    font-family:'Inter', monospace; font-size:11px; line-height:1.5;
+    color:var(--text-dim); white-space:pre-wrap; word-break:break-word;
+    max-height:220px; overflow:auto;
+  }
+
   /* ===== Ajustes mobile: header e composer mais compactos ===== */
   @media (max-width: 880px){
     header{ padding: 8px 14px 6px; }
@@ -468,7 +487,7 @@
     .feed{ padding: 14px 16px 16px; }
     .empty-state{ margin: 24px auto; }
     .empty-state h2{ font-size: 20px; }
-    .page{ font-size: 16.5px; line-height: 1.8; }
+    .page{ font-size: 17.5px; line-height: 1.9; }
     .composer{
       padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px));
     }
@@ -760,7 +779,7 @@
       oaEndpoint: '',
       oaKey: '',
       oaModel: '',
-      maxLength: 550,
+      maxLength: 250,
       temperature: 0.85,
       historyTokenBudget: 3000,
       maxHistoryTurns: 40,
@@ -1603,7 +1622,7 @@
       voiceBlock,
       formatLine,
       'Continue a história de forma coerente com tudo que já aconteceu. Escreva cenas vívidas mas não excessivamente longas. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora" — apenas pare no ponto certo pra próxima ação encaixar naturalmente.',
-      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 220) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
+      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 250) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       buildVectorMemoryBlock(relevantMemories),
@@ -1664,7 +1683,7 @@
     if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
     if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações (ex: openai/gpt-4o-mini).');
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const maxTokens = opts.maxTokens || ((c.maxLength || 220) + 60);
+    const maxTokens = opts.maxTokens || ((c.maxLength || 250) + 60);
     const headers = {'Content-Type':'application/json'};
     if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
     const reqBody = {
@@ -1722,7 +1741,7 @@
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n[' + povReminder + ']\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const genLength = opts.maxTokens || ((c.maxLength || 220) + 60);
+    const genLength = opts.maxTokens || ((c.maxLength || 250) + 60);
     const estimatedPromptTokens = Math.ceil(promptText.length / 3.2);
     const maxContextLength = Math.min(16384, Math.max(2048, estimatedPromptTokens + genLength + 512));
 
@@ -1845,7 +1864,6 @@
     t = t.replace(/\*\*(.*?)\*\*/gs, '$1');
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
-    // Remove vazamentos do prompt (lembretes, marcadores, system prompts)
     t = t.replace(/\[Lembrete:[^\]]*\]/gi, '');
     t = t.replace(/\[Lembrete[^\]]*\]/gi, '');
     t = t.replace(/Lembrete:\s*continue em primeira pessoa[^\n.]*/gi, '');
@@ -1855,7 +1873,6 @@
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, '');
     t = t.replace(/<\|[^|]*\|>/g, '');
     t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
-    // Remove linhas que só contenham meta-instruções
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -1875,12 +1892,10 @@
       if (bestCut > 20 && bestCut < t.length){
         t = t.slice(0, bestCut).trim();
       } else {
-        // não achou fim de frase — remove a última palavra incompleta
         const lastSpace = t.lastIndexOf(' ');
         if (lastSpace > t.length - 30 && lastSpace > 20){
           t = t.slice(0, lastSpace).trim();
         }
-        // se sobrar muito pouco, mantém o texto original (não vale a pena cortar)
         if (t.length < 15) t = text.replace(/\*/g, '').trim();
       }
     }
@@ -2860,6 +2875,40 @@
     `;
   }
 
+  function renderApiDebugPanel(){
+    const c = state.connector;
+    const ld = state.ui.lastDebug;
+    return `
+      <div class="api-debug-panel">
+        <div class="adp-title">🧪 Depuração de API</div>
+        <div class="summ-note" style="margin-bottom:8px;">
+          Quando o modo de depuração está ativo, cada geração guarda aqui o request enviado e a resposta crua recebida.
+          <strong>Importante:</strong> o painel só atualiza quando você reabre as Configurações depois de gerar uma resposta.
+          Se quiser testar agora, use o botão abaixo.
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button id="btnTestApiDebug" class="primary" style="flex:1;" ${state.ui.debugTestLoading ? 'disabled' : ''}>
+            ${state.ui.debugTestLoading ? '⏳ testando…' : '🧪 Fazer uma chamada de teste'}
+          </button>
+          <button id="btnClearApiDebug" ${ld ? '' : 'disabled'}>limpar</button>
+        </div>
+        ${state.ui.debugTestError ? `<div class="summ-note err" style="margin-top:8px;">Erro do teste: ${esc(state.ui.debugTestError)}</div>` : ''}
+        ${ld ? `
+          <div style="margin-top:10px;">
+            <div class="summ-note" style="font-size:11px;">
+              <strong>Última chamada:</strong> ${esc(ld.time)} · provedor ${esc(ld.provider)}
+            </div>
+            <div class="summ-note" style="font-size:11px; margin-top:6px;">Últimas mensagens enviadas:</div>
+            <pre>${esc(JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).slice(0, 2000))}${JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).length > 2000 ? '\n… (truncado)' : ''}</pre>
+            <div class="summ-note" style="font-size:11px; margin-top:6px;">Resposta crua da API:</div>
+            <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 2500))}${JSON.stringify(ld.response, null, 2).length > 2500 ? '\n… (truncado)' : ''}</pre>
+            ${ld.error ? `<div class="summ-note err" style="margin-top:6px;"><strong>Erro:</strong> ${esc(ld.error)}</div>` : ''}
+          </div>
+        ` : '<div class="summ-note" style="margin-top:8px; opacity:.7;">Nenhuma chamada registrada ainda nesta sessão.</div>'}
+      </div>
+    `;
+  }
+
   function renderSettingsModal(){
     const c = state.connector;
     const s = state.story;
@@ -2879,7 +2928,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v36</strong> (anti-vazamento de prompt + corte melhorado)
+          Versão do app: <strong>v37</strong> (tema clareado + debug consertado + fonte maior)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -2907,10 +2956,10 @@
           </div>
           <div class="field">
             <label>Modelos preferidos (opcional, separados por vírgula)</label>
-            <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Behemoth-X-123B-v2.1">
+            <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2">
           </div>
           <div class="helpbox">
-            Deixar em branco pega "qualquer worker disponível". Recomendo usar o <strong>Behemoth-X-123B</strong> que você já usa.
+            Deixar em branco pega "qualquer worker disponível". Recomendação atual: <strong>Skyfall-31B-v4.2</strong> (rápido, bom em RP) ou <strong>Behemoth-X-123B</strong> (mais lento, mais qualidade).
           </div>
         ` : ''}
         ${c.mode === 'openai' ? `
@@ -2957,8 +3006,9 @@
           <input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}">
         </div>
         <div class="field">
-          <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (mostra a resposta crua da API)</label>
+          <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (registra request/resposta da API)</label>
         </div>
+        ${c.debugMode ? renderApiDebugPanel() : ''}
 
         <div class="divider"></div>
         <h2>🧠 Memória vetorial (RAG)</h2>
@@ -2974,7 +3024,6 @@
           ` : `<br><em>entre com Google pra sincronizar</em>`}
           <br><br>
           Modelo: <code style="font-size:11px; color:var(--text);">all-MiniLM-L6-v2</code> (~23MB).
-          Baixa uma vez por navegador. Depois, os vetores sincronizam via Drive.
         </div>
         ${state.drive.signedIn ? `
           <div style="display:flex; gap:6px; margin-top:6px;">
@@ -2988,9 +3037,6 @@
         <button id="btnResetVectorCache" class="danger" style="width:100%; margin-top:6px;">
           🗑 Resetar cache do modelo
         </button>
-        <div class="summ-note" style="margin-top:5px; font-size:11px;">
-          Apaga o modelo baixado e os vetores locais. Os vetores do Drive não são afetados.
-        </div>
         ${state.ui.debugVector.open ? renderVectorDebugPanel() : ''}
 
         <div class="divider"></div>
@@ -3192,7 +3238,7 @@
         c.oaKey = g('oaKey') || '';
         c.oaModel = g('oaModel') || '';
       }
-      c.maxLength = parseInt(g('maxLength')) || 220;
+      c.maxLength = parseInt(g('maxLength')) || 250;
       c.temperature = parseFloat(g('temperature')) || 0.85;
       c.historyTokenBudget = parseInt(g('historyTokenBudget')) || 3000;
       c.maxHistoryTurns = parseInt(g('maxHistoryTurns')) || 40;
@@ -3266,12 +3312,24 @@
       render();
     });
 
+    // painel de debug da API
+    bind('#debugMode','change', e => {
+      state.connector.debugMode = !!e.target.checked;
+      // re-renderiza o modal pra mostrar/esconder o painel de depuração
+      setTimeout(() => { state.ui.modal = 'settings'; render(); }, 0);
+    });
+    bind('#btnTestApiDebug','click', runApiDebugTest);
+    bind('#btnClearApiDebug','click', () => {
+      state.ui.lastDebug = null;
+      render();
+    });
+
     bind('#closeStories','click', () => { state.ui.modal = null; render(); });
     bind('#overlayStories','click', (e) => { if (e.target.id === 'overlayStories'){ state.ui.modal = null; render(); } });
     bind('#btnCreateStory','click', createStory);
     bind('#btnExportStory','click', exportStory);
     bind('#btnImportTrigger','click', () => document.getElementById('importInput').click());
-    bind('#importInput','change', e => { if (e.target.files[0]) importStory(e.target.files[0]); });
+    bind('#importInput','change', e => { if (e.target.files && e.target.files[0]) importStory(e.target.files[0]); });
     $$('[data-open]').forEach(b => b.onclick = () => { loadStory(b.dataset.open); state.ui.modal = null; });
     $$('[data-delstory]').forEach(b => b.onclick = () => deleteStory(b.dataset.delstory));
   }
@@ -3299,6 +3357,36 @@
       state.ui.debugVector.loading = false;
       state.ui.debugVector.error = err.message || String(err);
     }
+    render();
+  }
+
+  // Faz uma chamada curta de teste pra popular o painel de debug
+  async function runApiDebugTest(){
+    if (state.ui.debugTestLoading) return;
+    if (!state.story) return;
+    state.ui.debugTestLoading = true;
+    state.ui.debugTestError = null;
+    render();
+    try{
+      const testMessages = [
+        {role:'system', content:'Você é um narrador de RPG. Responda em uma única frase.'},
+        {role:'user', content:'Teste de conexão. Narre em uma frase: "eu abro a porta".'}
+      ];
+      const conn = activeConnector();
+      if (conn.mode === 'horde'){
+        await callAiHorde(testMessages, {maxTokens: 40, temperature: 0.5});
+      } else if (conn.mode === 'builtin'){
+        await callBuiltinClaude(testMessages, {maxTokens: 40, temperature: 0.5});
+      } else {
+        await callOpenAICompatible(testMessages, {maxTokens: 40, temperature: 0.5});
+      }
+      // Se chegou aqui, tudo certo. lastDebug já foi populado pelo recordDebug.
+      state.ui.debugTestError = null;
+    }catch(err){
+      state.ui.debugTestError = err.message || String(err);
+    }
+    state.ui.debugTestLoading = false;
+    state.ui.modal = 'settings';
     render();
   }
 

@@ -17,7 +17,6 @@
 
 <style>
   :root{
-    /* tema clareado: fundo mais quente, menos preto absoluto */
     --ink: #141416;
     --panel: #1e1e22;
     --panel-2: #26262b;
@@ -459,7 +458,6 @@
     font-family:'Newsreader', serif; font-size:13.5px; color:var(--text); line-height:1.55;
   }
 
-  /* painel de debug da API */
   .api-debug-panel{
     margin-top: 10px; padding: 12px; border-radius: 12px;
     background: rgba(239,236,228,0.05);
@@ -475,6 +473,22 @@
     font-family:'Inter', monospace; font-size:11px; line-height:1.5;
     color:var(--text-dim); white-space:pre-wrap; word-break:break-word;
     max-height:220px; overflow:auto;
+  }
+  .raw-response-panel{
+    margin-top: 10px; padding: 12px; border-radius: 12px;
+    background: rgba(201,106,92,0.08);
+    border: 1px solid rgba(201,106,92,0.3);
+  }
+  .raw-response-panel .rrp-title{
+    font-family:'Inter', sans-serif; font-size:10.5px; color:#f0c9c2;
+    letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px;
+  }
+  .raw-response-panel pre{
+    background:var(--ink); border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; margin:8px 0 0;
+    font-family:'Inter', monospace; font-size:11px; line-height:1.5;
+    color:var(--text-dim); white-space:pre-wrap; word-break:break-word;
+    max-height:180px; overflow:auto;
   }
 
   /* ===== Ajustes mobile: header e composer mais compactos ===== */
@@ -755,6 +769,9 @@
       memoryTab: 'memory',
       expandedCard: null,
       lastDebug: null,
+      lastRaw: null,
+      debugTestLoading: false,
+      debugTestError: null,
       forcedLayout: (function(){ try{ return localStorage.getItem('aventura:forcedLayout') || 'auto'; }catch(e){ return 'auto'; } })(),
       openActionsFor: null,
       summarizing: false,
@@ -1848,8 +1865,17 @@
     if (conn.mode === 'horde') result = await callAiHorde(messages);
     else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
     else result = await callOpenAICompatible(messages);
+    const rawBeforeClean = result.text;
     result.text = cleanNarrationText(result.text, result.cutOff);
     result.ragUsed = ragUsed || 0;
+    // guarda o cru e o limpo pra debug
+    state.ui.lastRaw = {
+      time: new Date().toLocaleTimeString('pt-BR'),
+      raw: rawBeforeClean,
+      cleaned: result.text,
+      cutOff: !!result.cutOff,
+      wasEmptied: !result.text || !result.text.trim()
+    };
     if (result.meta){
       state.story.stats = state.story.stats || {totalTokens:0, totalKudos:0};
       if (result.usage) state.story.stats.totalTokens += (result.usage.total_tokens || 0);
@@ -1860,28 +1886,48 @@
 
   function cleanNarrationText(text, cutOff){
     if (!text) return text;
+    const original = text;
     let t = text;
     t = t.replace(/\*\*(.*?)\*\*/gs, '$1');
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
-    t = t.replace(/\[Lembrete:[^\]]*\]/gi, '');
-    t = t.replace(/\[Lembrete[^\]]*\]/gi, '');
-    t = t.replace(/Lembrete:\s*continue em primeira pessoa[^\n.]*/gi, '');
-    t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, '');
-    t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, '');
-    t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, '');
-    t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, '');
-    t = t.replace(/<\|[^|]*\|>/g, '');
-    t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
+    // remove vazamentos do prompt — mas com cuidado pra não apagar a resposta inteira
+    t = t.replace(/\[Lembrete:[^\]]*\]/gi, ' ');
+    t = t.replace(/\[Lembrete[^\]]*\]/gi, ' ');
+    t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ');
+    t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, ' ');
+    t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ');
+    t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
+    t = t.replace(/<\|[^|]*\|>/g, ' ');
+    // remove linhas que SÓ contenham meta-instruções
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
-      if (l.startsWith('[lembrete') || l.startsWith('lembrete:')) return false;
-      if (l.startsWith('[continue') || l.startsWith('(continue')) return false;
-      if (l === 'assistant:' || l === 'system:') return false;
+      if (l.startsWith('[lembrete') && l.endsWith(']')) return false;
+      if (l.startsWith('lembrete:') && l.length < 300) return false;
+      if (l.startsWith('[continue') && l.endsWith(']')) return false;
+      if (l.startsWith('(continue') && l.endsWith(')')) return false;
       return true;
     }).join('\n');
-    t = t.replace(/[ \t]{2,}/g, ' ').trim();
+    // limpa marcadores no início de linha
+    t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
+    // normaliza espaços
+    t = t.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+
+    // REDE DE SEGURANÇA: se limpou demais e sobrou vazio, devolve o original "suavizado"
+    if (!t || t.length < 3){
+      let fallback = original.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+      // remove só os marcadores conhecidos no fallback
+      fallback = fallback.replace(/\[Lembrete:[^\]]*\]/gi, ' ')
+                           .replace(/\[Lembrete[^\]]*\]/gi, ' ')
+                           .replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ')
+                           .replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ')
+                           .replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ')
+                           .replace(/<\|[^|]*\|>/g, ' ')
+                           .replace(/\s+/g, ' ').trim();
+      return fallback;
+    }
+
     if (cutOff){
       const enders = ['.', '!', '?', '…', '."', '!"', '?"', '.”', '!”', '?"'];
       let bestCut = -1;
@@ -1896,7 +1942,6 @@
         if (lastSpace > t.length - 30 && lastSpace > 20){
           t = t.slice(0, lastSpace).trim();
         }
-        if (t.length < 15) t = text.replace(/\*/g, '').trim();
       }
     }
     return t;
@@ -1955,9 +2000,13 @@
       const result = await generate(text);
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0};
       s.turns.push(aiTurn);
-      const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-      updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
-      if (_embedder){
+      if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API → Ver texto cru.', true);
+      } else {
+        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
+        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
+      }
+      if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
       }
     }catch(err){
@@ -1982,9 +2031,13 @@
       const result = await generate('', {isContinue:true});
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0};
       s.turns.push(aiTurn);
-      const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-      updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
-      if (_embedder){
+      if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API.', true);
+      } else {
+        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
+        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
+      }
+      if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
       }
       scheduleSave();
@@ -2025,9 +2078,13 @@
       t.alts.push(result.text);
       t.altIndex = t.alts.length - 1;
       t.text = result.text;
-      const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-      updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
-      if (_embedder){
+      if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API.', true);
+      } else {
+        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
+        updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
+      }
+      if (_embedder && result.text && result.text.trim()){
         saveTurnVector(t).catch(() => {});
       }
     }catch(err){
@@ -2878,19 +2935,18 @@
   function renderApiDebugPanel(){
     const c = state.connector;
     const ld = state.ui.lastDebug;
+    const lr = state.ui.lastRaw;
     return `
       <div class="api-debug-panel">
         <div class="adp-title">🧪 Depuração de API</div>
         <div class="summ-note" style="margin-bottom:8px;">
-          Quando o modo de depuração está ativo, cada geração guarda aqui o request enviado e a resposta crua recebida.
-          <strong>Importante:</strong> o painel só atualiza quando você reabre as Configurações depois de gerar uma resposta.
-          Se quiser testar agora, use o botão abaixo.
+          O painel só atualiza quando você reabre as Configurações depois de gerar uma resposta. Use o botão abaixo para um teste rápido.
         </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button id="btnTestApiDebug" class="primary" style="flex:1;" ${state.ui.debugTestLoading ? 'disabled' : ''}>
             ${state.ui.debugTestLoading ? '⏳ testando…' : '🧪 Fazer uma chamada de teste'}
           </button>
-          <button id="btnClearApiDebug" ${ld ? '' : 'disabled'}>limpar</button>
+          <button id="btnClearApiDebug" ${(ld || lr) ? '' : 'disabled'}>limpar tudo</button>
         </div>
         ${state.ui.debugTestError ? `<div class="summ-note err" style="margin-top:8px;">Erro do teste: ${esc(state.ui.debugTestError)}</div>` : ''}
         ${ld ? `
@@ -2898,14 +2954,26 @@
             <div class="summ-note" style="font-size:11px;">
               <strong>Última chamada:</strong> ${esc(ld.time)} · provedor ${esc(ld.provider)}
             </div>
-            <div class="summ-note" style="font-size:11px; margin-top:6px;">Últimas mensagens enviadas:</div>
-            <pre>${esc(JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).slice(0, 2000))}${JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).length > 2000 ? '\n… (truncado)' : ''}</pre>
+            <div class="summ-note" style="font-size:11px; margin-top:6px;">Request enviado:</div>
+            <pre>${esc(JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).slice(0, 1500))}${JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).length > 1500 ? '\n… (truncado)' : ''}</pre>
             <div class="summ-note" style="font-size:11px; margin-top:6px;">Resposta crua da API:</div>
-            <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 2500))}${JSON.stringify(ld.response, null, 2).length > 2500 ? '\n… (truncado)' : ''}</pre>
+            <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 1500))}${JSON.stringify(ld.response, null, 2).length > 1500 ? '\n… (truncado)' : ''}</pre>
             ${ld.error ? `<div class="summ-note err" style="margin-top:6px;"><strong>Erro:</strong> ${esc(ld.error)}</div>` : ''}
           </div>
         ` : '<div class="summ-note" style="margin-top:8px; opacity:.7;">Nenhuma chamada registrada ainda nesta sessão.</div>'}
       </div>
+      ${lr ? `
+        <div class="raw-response-panel">
+          <div class="rrp-title">${lr.wasEmptied ? '⚠ Última resposta foi ZERADA pela limpeza' : '📄 Última resposta (cru vs. limpo)'}</div>
+          <div class="summ-note" style="font-size:11px;">
+            <strong>Hora:</strong> ${esc(lr.time)} · <strong>Cortada pelo limite:</strong> ${lr.cutOff ? 'sim' : 'não'} · <strong>Tamanho cru:</strong> ${(lr.raw || '').length} chars · <strong>Tamanho limpo:</strong> ${(lr.cleaned || '').length} chars
+          </div>
+          <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Texto CRU (antes de qualquer limpeza):</div>
+          <pre>${esc((lr.raw || '').slice(0, 1500))}${(lr.raw || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
+          <div class="summ-note" style="font-size:11px; margin-top:6px;">🟢 Texto LIMPO (o que aparece na história):</div>
+          <pre>${esc((lr.cleaned || '(vazio)').slice(0, 1500))}${(lr.cleaned || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
+        </div>
+      ` : ''}
     `;
   }
 
@@ -2928,7 +2996,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v37</strong> (tema clareado + debug consertado + fonte maior)
+          Versão do app: <strong>v38</strong> (correção: resposta vazia após limpeza)
           ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
@@ -3022,8 +3090,6 @@
             <br>⤴ Último envio: ${esc(lastPush)}
             <br>⤵ Último download: ${esc(lastPull)}
           ` : `<br><em>entre com Google pra sincronizar</em>`}
-          <br><br>
-          Modelo: <code style="font-size:11px; color:var(--text);">all-MiniLM-L6-v2</code> (~23MB).
         </div>
         ${state.drive.signedIn ? `
           <div style="display:flex; gap:6px; margin-top:6px;">
@@ -3312,15 +3378,14 @@
       render();
     });
 
-    // painel de debug da API
     bind('#debugMode','change', e => {
       state.connector.debugMode = !!e.target.checked;
-      // re-renderiza o modal pra mostrar/esconder o painel de depuração
       setTimeout(() => { state.ui.modal = 'settings'; render(); }, 0);
     });
     bind('#btnTestApiDebug','click', runApiDebugTest);
     bind('#btnClearApiDebug','click', () => {
       state.ui.lastDebug = null;
+      state.ui.lastRaw = null;
       render();
     });
 
@@ -3360,7 +3425,6 @@
     render();
   }
 
-  // Faz uma chamada curta de teste pra popular o painel de debug
   async function runApiDebugTest(){
     if (state.ui.debugTestLoading) return;
     if (!state.story) return;
@@ -3380,7 +3444,6 @@
       } else {
         await callOpenAICompatible(testMessages, {maxTokens: 40, temperature: 0.5});
       }
-      // Se chegou aqui, tudo certo. lastDebug já foi populado pelo recordDebug.
       state.ui.debugTestError = null;
     }catch(err){
       state.ui.debugTestError = err.message || String(err);

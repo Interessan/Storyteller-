@@ -171,6 +171,27 @@
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
 
+  /* seletor de idioma */
+  .lang-options{ display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
+  .lang-option{
+    display:flex; align-items:flex-start; gap:8px; padding:9px 11px;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
+    cursor:pointer; transition: background .12s, border-color .12s;
+    user-select:none;
+  }
+  .lang-option:hover{ background:rgba(255,255,255,0.06); }
+  .lang-option.selected{ background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.25); }
+  .lang-option input[type=radio]{
+    margin:2px 0 0; accent-color: var(--accent); flex-shrink:0;
+  }
+  .lang-option .lo-body{ flex:1; min-width:0; }
+  .lang-option .lo-title{
+    font-family:'Inter', sans-serif; font-size:13px; color:var(--text); margin-bottom:2px; font-weight:500;
+  }
+  .lang-option .lo-desc{
+    font-family:'Inter', sans-serif; font-size:11px; color:var(--muted); line-height:1.4;
+  }
+
   .pending-summary{
     background: rgba(239,236,228,0.06);
     border: 1px solid rgba(239,236,228,0.22);
@@ -831,6 +852,8 @@
         world: '',
         authorNote: '',
         summary: '',
+        language: 'pt-BR',
+        languageCustom: '',
         characters: [],
         locations: [],
         groups: [],
@@ -1372,6 +1395,9 @@
     if (typeof s.memory.world !== 'string') s.memory.world = '';
     if (typeof s.memory.authorNote !== 'string') s.memory.authorNote = '';
     if (typeof s.memory.summary !== 'string') s.memory.summary = '';
+    // migração: idioma da narração
+    if (typeof s.memory.language !== 'string') s.memory.language = 'pt-BR';
+    if (typeof s.memory.languageCustom !== 'string') s.memory.languageCustom = '';
     if (!s.memory.chapters) s.memory.chapters = [];
     if (!s.migratedChapters){
       if (s.memory.summary && !s.memory.chapters.length){
@@ -1572,6 +1598,29 @@
     return 'RESUMO DOS CAPÍTULOS ANTERIORES (na ordem em que aconteceram):\n' + lines.join('\n\n');
   }
 
+  function buildLanguageInstruction(mem){
+    const lang = mem.language || 'pt-BR';
+    if (lang === 'en'){
+      return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em inglês. NUNCA misture português.';
+    }
+    if (lang === 'pt-en'){
+      return 'IDIOMA DA NARRAÇÃO: escreva a narração em português brasileiro, MAS pode usar termos e expressões curtas em inglês ocasionalmente — quando fizer sentido para o tom, para o personagem, ou para dar um clima específico (ex: "ele sussurra um "oh my god" baixinho", ou "o cheiro de gasolina, tipo, gasoline, é o que fica"). Nunca troque palavras comuns do cotidiano (chão, olhos, falar) — só use inglês quando for natural para o momento.';
+    }
+    if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()){
+      return 'IDIOMA E ESTILO DA NARRAÇÃO: ' + mem.languageCustom.trim();
+    }
+    // default pt-BR
+    return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em português brasileiro. É OBRIGATÓRIO: nunca misture palavras em inglês — nem "floor", nem "speak", nem "those eyes", nem qualquer outra. Se um termo não existe em português, use a tradução mais próxima ou adapte naturalmente dentro da frase em português.';
+  }
+
+  function buildLanguageReminder(mem){
+    const lang = mem.language || 'pt-BR';
+    if (lang === 'en') return ' Escreva toda a narração em inglês.';
+    if (lang === 'pt-en') return ' Narração em português, com inglês ocasional se fizer sentido.';
+    if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()) return ' Siga a instrução de idioma/estilo definida na memória.';
+    return ' Narração em português brasileiro, sem palavras em inglês.';
+  }
+
   function buildVectorMemoryBlock(memories){
     if (!memories || !memories.length) return '';
     const lines = memories.map((m, i) => {
@@ -1612,6 +1661,7 @@
 
     const protagCard = (s.memory.characters || []).find(c => c.isProtagonist);
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
+    const languageLine = buildLanguageInstruction(s.memory);
     const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você", "ele" ou "ela", nem pelo nome, ao narrar a ação, fala ou percepção dele/dela' + (protagName ? (' (nunca "' + protagName + ' faz", nunca "ela faz"/"ele faz" pra se referir a ' + protagName + ')') : '') + '; os outros personagens continuam normalmente em terceira pessoa (nome, "ele", "ela" — "ele diz", "ela sorri"), só o protagonista é sempre "eu".'
       + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela e os pronomes "ela"/"ele" NUNCA aparecem como sujeito narrando a própria ação — troque sempre por "eu": errado "' + protagName + ' sorri e diz" ou "ela sorri e diz", certo "eu sorrio e digo".') : '')
       + ' Exemplos do jeito ERRADO (nunca faça isso): "Você entra na sala e vê o General."' + (protagName ? (' / "' + protagName + ' entra na sala e vê o General." / "Ela aponta para o chão, tentando se acalmar."') : '') + ' Exemplo do jeito CERTO: "Eu entro na sala e vejo o General." / "Eu aponto para o chão, tentando me acalmar."';
@@ -1632,6 +1682,7 @@
 
     const sys = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
+      languageLine,
       povLine,
       voiceBlock,
       formatLine,
@@ -1661,15 +1712,11 @@
       messages.push({ role: t.type === 'user' ? 'user' : 'assistant', content: t.text });
     });
 
-    // IMPORTANTE: o lembrete de POV vai ANTES da ação (não depois).
-    // Motivo: modelos de "continuar texto" tendem a ecoar a ÚLTIMA coisa do prompt.
-    // Se o prompt termina com [Lembrete: ...], o modelo devolve o lembrete em vez de
-    // narrar. Colocando o lembrete ANTES da ação, o prompt termina com a ação do
-    // jogador — que é exatamente o que o modelo deve continuar.
     const voiceShort = (protagCard && protagCard.narrativeVoice)
       ? (' Voz dela: ' + protagCard.narrativeVoice.split(/[.!?]/)[0].slice(0, 110).trim() + '.')
       : '';
-    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + ' O protagonista nunca é "você", "ele" nem "ela".]';
+    const langReminder = buildLanguageReminder(s.memory);
+    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela".]';
     if (opts.isContinue){
       messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
@@ -2176,13 +2223,12 @@
       s.memory.authorNote ? ('- Tom/notas do autor: ' + s.memory.authorNote) : '',
       '',
       'INSTRUÇÕES DO RESUMO:',
-      '- Escreva em prosa corrida, em TERCEIRA PESSOA neutra (você é o narrador resumindo os eventos, não a protagonista).',
+      '- Escreva em prosa corrida, em TERCEIRA PESSOA neutra.',
       '- Preserve obrigatoriamente: decisões importantes tomadas, promessas feitas, relações que mudaram (alianças, desconfianças, afetos), lugares visitados, objetos ganhos ou perdidos, revelações descobertas, e personagens apresentados com traços marcantes.',
       '- Mantenha os nomes próprios EXATAMENTE como aparecem no texto original.',
       '- 4 a 6 frases curtas. Direto ao ponto, sem floreio.',
-      '- NÃO invente nada que não esteja no texto original. NÃO especule sobre intenções que não foram ditas.',
-      '- NÃO use markdown nem asteriscos.',
-      '- Responda APENAS com o resumo, sem preâmbulo do tipo "Aqui está o resumo:".'
+      '- NÃO invente nada que não esteja no texto original.',
+      '- Responda APENAS com o resumo.'
     ].filter(Boolean).join('\n');
 
     try{
@@ -2312,7 +2358,7 @@
     if (hasIds){
       msg += '\n\nAs ' + ch.archivedTurnIds.length + ' falas originais que ele resumia vão voltar ao contexto ativo.';
     } else {
-      msg += '\n\n(Este capítulo foi criado numa versão antiga — não dá pra restaurar as falas originais automaticamente. Use "🔓 Desarquivar tudo" se precisar.)';
+      msg += '\n\n(Este capítulo foi criado numa versão antiga — não dá pra restaurar as falas originais automaticamente.)';
     }
     const ok = window.confirm(msg);
     if (!ok) return;
@@ -2345,6 +2391,18 @@
     updateStatus(archivedCount + ' falas desarquivadas.', false);
     scheduleSave();
     render();
+  }
+
+  function setLanguage(lang){
+    if (!state.story) return;
+    state.story.memory.language = lang;
+    scheduleSave();
+    render();
+  }
+  function updateLanguageCustom(val){
+    if (!state.story) return;
+    state.story.memory.languageCustom = val;
+    scheduleSave();
   }
 
   function openCardEditor(type, id){
@@ -2623,9 +2681,51 @@
   function renderMemoryTabContent(){
     const s = state.story;
     const ps = state.ui.pendingSummary;
+    const currentLang = s.memory.language || 'pt-BR';
     return `
       <div>
         <h2>Memória</h2>
+
+        <div class="field">
+          <label>Idioma da narração</label>
+          <div class="lang-options">
+            <label class="lang-option ${currentLang === 'pt-BR' ? 'selected' : ''}">
+              <input type="radio" name="lang" value="pt-BR" ${currentLang === 'pt-BR' ? 'checked' : ''}>
+              <div class="lo-body">
+                <div class="lo-title">🇧🇷 Português brasileiro</div>
+                <div class="lo-desc">Narração 100% em PT-BR, sem palavras em inglês. Ideal para histórias brasileiras.</div>
+              </div>
+            </label>
+            <label class="lang-option ${currentLang === 'pt-en' ? 'selected' : ''}">
+              <input type="radio" name="lang" value="pt-en" ${currentLang === 'pt-en' ? 'checked' : ''}>
+              <div class="lo-body">
+                <div class="lo-title">🌎 PT-BR com termos em inglês</div>
+                <div class="lo-desc">Narração em português, mas com inglês ocasional quando faz sentido pro personagem ou clima.</div>
+              </div>
+            </label>
+            <label class="lang-option ${currentLang === 'en' ? 'selected' : ''}">
+              <input type="radio" name="lang" value="en" ${currentLang === 'en' ? 'checked' : ''}>
+              <div class="lo-body">
+                <div class="lo-title">🇺🇸 Inglês</div>
+                <div class="lo-desc">Narração toda em inglês.</div>
+              </div>
+            </label>
+            <label class="lang-option ${currentLang === 'custom' ? 'selected' : ''}">
+              <input type="radio" name="lang" value="custom" ${currentLang === 'custom' ? 'checked' : ''}>
+              <div class="lo-body">
+                <div class="lo-title">✏️ Personalizado</div>
+                <div class="lo-desc">Você escreve a instrução exata de idioma/estilo.</div>
+              </div>
+            </label>
+          </div>
+          ${currentLang === 'custom' ? `
+            <textarea id="langCustom" rows="3" placeholder="ex: Narre em português brasileiro, mas todos os diálogos de John (americano) em inglês com tradução livre em itálico depois.">${esc(s.memory.languageCustom || '')}</textarea>
+          ` : ''}
+          <div class="summ-note" style="margin-top:6px; font-size:11px;">
+            ⚠️ Mesmo com a instrução forte, modelos treinados em inglês podem vazar palavras ocasionalmente. Se acontecer muito, mude para "Português brasileiro" ou teste outro modelo.
+          </div>
+        </div>
+
         <div class="field">
           <label>Mundo / cenário</label>
           <textarea id="memWorld" rows="3" placeholder="Onde e quando se passa...">${esc(s.memory.world)}</textarea>
@@ -2657,13 +2757,12 @@
           ${ps ? `
             <div class="pending-summary">
               <div class="pending-title">📝 Resumo sugerido — revise antes de aceitar</div>
-              <div class="summ-note" style="margin-bottom:8px;">A IA resumiu ${ps.chunkIds.length} falas. Você pode editar o texto abaixo antes de aceitar.</div>
+              <div class="summ-note" style="margin-bottom:8px;">A IA resumiu ${ps.chunkIds.length} falas.</div>
               <textarea id="pendingSummaryText" rows="7">${esc(ps.text)}</textarea>
               <div class="pending-actions">
                 <button class="primary" id="btnAcceptSummary" style="flex:1;">✓ Aceitar e arquivar</button>
                 <button id="btnDiscardSummary">✕ Descartar</button>
               </div>
-              <div class="summ-note" style="margin-top:8px; font-size:11px;">Ao aceitar, as ${ps.chunkIds.length} falas saem do contexto ativo (continuam visíveis no histórico). Você pode restaurá-las depois apagando este capítulo.</div>
             </div>
           ` : ''}
 
@@ -2687,11 +2786,9 @@
         <button id="btnSummarize" style="width:100%" ${(state.ui.summarizing || ps) ? 'disabled' : ''}>
           ${state.ui.summarizing ? '🧠 Resumindo…' : (ps ? '⚠ Revise o resumo acima primeiro' : '🧠 Resumir início automaticamente')}
         </button>
-        <div class="summ-note">Comprime as falas mais antigas num novo capítulo e as arquiva.</div>
 
         ${s.turns.filter(t => t.archived).length ? `
           <button id="btnUnarchiveAll" style="width:100%; margin-top:10px;">🔓 Desarquivar tudo (${s.turns.filter(t => t.archived).length})</button>
-          <div class="summ-note" style="margin-top:5px;">Faz TODAS as falas arquivadas voltarem ao contexto ativo.</div>
         ` : ''}
       </div>
     `;
@@ -2898,9 +2995,7 @@
     const dv = state.ui.debugVector;
     return `
       <div class="vector-debug-panel">
-        <div class="summ-note" style="margin-bottom:8px;">
-          Cole qualquer frase (uma ação, um nome, uma lembrança) e veja os trechos mais similares guardados na memória vetorial.
-        </div>
+        <div class="summ-note" style="margin-bottom:8px;">Teste de busca vetorial.</div>
         <input type="text" id="debugVectorQuery" placeholder="Ex: a Carol e a bicicleta" value="${esc(dv.query || '')}">
         <div style="display:flex; gap:6px; margin-top:8px;">
           <button class="primary" id="btnRunDebugSearch" style="flex:1;" ${dv.loading ? 'disabled' : ''}>${dv.loading ? '🔍 Buscando…' : '🔍 Buscar'}</button>
@@ -2913,7 +3008,7 @@
               ? '<div class="summ-note" style="opacity:.7;">Nenhum resultado acima do limiar.</div>'
               : dv.results.map((r, i) => `
                 <div class="vector-result">
-                  <div class="vr-head">#${i+1} · score ${(r.score*100).toFixed(0)}% · ${r.type === 'user' ? 'ação' : 'narração'}${r.archived ? ' · arquivado' : ''}</div>
+                  <div class="vr-head">#${i+1} · score ${(r.score*100).toFixed(0)}% · ${r.type === 'user' ? 'ação' : 'narração'}</div>
                   <div class="vr-text">${esc((r.text || '').slice(0, 300))}${(r.text || '').length > 300 ? '…' : ''}</div>
                 </div>
               `).join('')
@@ -2931,37 +3026,30 @@
     return `
       <div class="api-debug-panel">
         <div class="adp-title">🧪 Depuração de API</div>
-        <div class="summ-note" style="margin-bottom:8px;">
-          O painel só atualiza quando você reabre as Configurações depois de gerar uma resposta. Use o botão abaixo para um teste rápido.
-        </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button id="btnTestApiDebug" class="primary" style="flex:1;" ${state.ui.debugTestLoading ? 'disabled' : ''}>
             ${state.ui.debugTestLoading ? '⏳ testando…' : '🧪 Fazer uma chamada de teste'}
           </button>
-          <button id="btnClearApiDebug" ${(ld || lr) ? '' : 'disabled'}>limpar tudo</button>
+          <button id="btnClearApiDebug" ${(ld || lr) ? '' : 'disabled'}>limpar</button>
         </div>
-        ${state.ui.debugTestError ? `<div class="summ-note err" style="margin-top:8px;">Erro do teste: ${esc(state.ui.debugTestError)}</div>` : ''}
+        ${state.ui.debugTestError ? `<div class="summ-note err" style="margin-top:8px;">Erro: ${esc(state.ui.debugTestError)}</div>` : ''}
         ${ld ? `
           <div style="margin-top:10px;">
-            <div class="summ-note" style="font-size:11px;">
-              <strong>Última chamada:</strong> ${esc(ld.time)} · provedor ${esc(ld.provider)}
-            </div>
-            <div class="summ-note" style="font-size:11px; margin-top:6px;">Resposta crua da API:</div>
-            <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 1500))}${JSON.stringify(ld.response, null, 2).length > 1500 ? '\n… (truncado)' : ''}</pre>
-            ${ld.error ? `<div class="summ-note err" style="margin-top:6px;"><strong>Erro:</strong> ${esc(ld.error)}</div>` : ''}
+            <div class="summ-note" style="font-size:11px;"><strong>Última chamada:</strong> ${esc(ld.time)} · ${esc(ld.provider)}</div>
+            <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 1000))}${JSON.stringify(ld.response, null, 2).length > 1000 ? '\n…' : ''}</pre>
           </div>
-        ` : '<div class="summ-note" style="margin-top:8px; opacity:.7;">Nenhuma chamada registrada ainda.</div>'}
+        ` : ''}
       </div>
       ${lr ? `
         <div class="raw-response-panel">
-          <div class="rrp-title">${lr.wasEmptied ? '⚠ Última resposta foi ZERADA pela limpeza' : '📄 Última resposta (cru vs. limpo)'}</div>
+          <div class="rrp-title">${lr.wasEmptied ? '⚠ ZERADA pela limpeza' : '📄 Cru vs. limpo'}</div>
           <div class="summ-note" style="font-size:11px;">
-            <strong>Hora:</strong> ${esc(lr.time)} · <strong>Cortada:</strong> ${lr.cutOff ? 'sim' : 'não'} · <strong>Caracteres:</strong> cru ${(lr.raw || '').length} → limpo ${(lr.cleaned || '').length}
+            ${esc(lr.time)} · cru ${(lr.raw || '').length} → limpo ${(lr.cleaned || '').length} chars
           </div>
-          <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Texto CRU (antes da limpeza):</div>
-          <pre>${esc((lr.raw || '').slice(0, 1500))}${(lr.raw || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
-          <div class="summ-note" style="font-size:11px; margin-top:6px;">🟢 Texto LIMPO (o que aparece na história):</div>
-          <pre>${esc((lr.cleaned || '(vazio)').slice(0, 1500))}${(lr.cleaned || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
+          <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Cru:</div>
+          <pre>${esc((lr.raw || '').slice(0, 800))}${(lr.raw || '').length > 800 ? '\n…' : ''}</pre>
+          <div class="summ-note" style="font-size:11px; margin-top:6px;">🟢 Limpo:</div>
+          <pre>${esc((lr.cleaned || '(vazio)').slice(0, 800))}${(lr.cleaned || '').length > 800 ? '\n…' : ''}</pre>
         </div>
       ` : ''}
     `;
@@ -2974,7 +3062,6 @@
     if (state.ui.vectorLoading) vectorStatusLabel = '⏳ carregando modelo…';
     else if (state.ui.vectorError) vectorStatusLabel = '⚠ erro: ' + state.ui.vectorError;
     else if (state.ui.vectorReady) vectorStatusLabel = '✓ pronta';
-    else vectorStatusLabel = '— (inicializando)';
 
     const syncMeta = state.story ? getSyncMeta(state.story.id) : null;
     const lastPush = syncMeta && syncMeta.lastPushedAt ? new Date(syncMeta.lastPushedAt).toLocaleString('pt-BR') : 'nunca';
@@ -2986,77 +3073,47 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v39</strong> (correção: prompt terminava com [Lembrete], IA ecoava)
-          ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
+          Versão: <strong>v40</strong> (idioma por história)
         </div>
         <div class="field">
           <label>Provedor</label>
           <select id="connMode">
             <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, comunitário, aceita NSFW)</option>
-            <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI (OpenRouter, Ollama, etc.)</option>
-            <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (só pra testar — sem NSFW)</option>
+            <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI</option>
+            <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (sem NSFW)</option>
           </select>
         </div>
 
         ${c.mode === 'horde' ? `
           <div class="field">
-            <label>Chave de API do AI Horde (opcional)</label>
+            <label>Chave do AI Horde (opcional)</label>
             <input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo">
           </div>
           <div class="field">
-            <label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir conteúdo adulto (NSFW)</label>
+            <label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir NSFW</label>
           </div>
           <div class="field">
-            <label>Modelos preferidos (opcional, separados por vírgula)</label>
+            <label>Modelos preferidos (separados por vírgula)</label>
             <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2">
-          </div>
-          <div class="helpbox">
-            Recomendação atual: <strong>Skyfall-31B-v4.2</strong> (rápido, bom em RP).
           </div>
         ` : ''}
         ${c.mode === 'openai' ? `
-          <div class="field">
-            <label>Endpoint</label>
-            <input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://openrouter.ai/api/v1/chat/completions">
-          </div>
-          <div class="field">
-            <label>Chave de API</label>
-            <input type="text" id="oaKey" value="${esc(c.oaKey)}" placeholder="sk-...">
-          </div>
-          <div class="field">
-            <label>Nome do modelo</label>
-            <input type="text" id="oaModel" value="${esc(c.oaModel)}" placeholder="ex: meta-llama/llama-3.1-70b-instruct">
-          </div>
+          <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://openrouter.ai/api/v1/chat/completions"></div>
+          <div class="field"><label>Chave</label><input type="text" id="oaKey" value="${esc(c.oaKey)}"></div>
+          <div class="field"><label>Modelo</label><input type="text" id="oaModel" value="${esc(c.oaModel)}"></div>
         ` : ''}
 
         <div class="divider"></div>
         <div class="row2">
-          <div class="field">
-            <label>Tamanho máx. da resposta (tokens)</label>
-            <input type="text" id="maxLength" value="${c.maxLength}">
-          </div>
-          <div class="field">
-            <label>Temperatura (0–2)</label>
-            <input type="text" id="temperature" value="${c.temperature}">
-          </div>
+          <div class="field"><label>Máx. tokens da resposta</label><input type="text" id="maxLength" value="${c.maxLength}"></div>
+          <div class="field"><label>Temperatura</label><input type="text" id="temperature" value="${c.temperature}"></div>
         </div>
         <div class="row2">
-          <div class="field">
-            <label>Orçamento de tokens pro histórico</label>
-            <input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}">
-          </div>
-          <div class="field">
-            <label>Teto de falas (segurança)</label>
-            <input type="text" id="maxHistoryTurns" value="${c.maxHistoryTurns}">
-          </div>
+          <div class="field"><label>Orçamento do histórico</label><input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}"></div>
+          <div class="field"><label>Teto de falas</label><input type="text" id="maxHistoryTurns" value="${c.maxHistoryTurns}"></div>
         </div>
-        <div class="field">
-          <label>Orçamento de tokens pro bloco de fichas</label>
-          <input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}">
-        </div>
-        <div class="field">
-          <label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração (registra request/resposta da API)</label>
-        </div>
+        <div class="field"><label>Orçamento do bloco de fichas</label><input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}"></div>
+        <div class="field"><label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração</label></div>
         ${c.debugMode ? renderApiDebugPanel() : ''}
 
         <div class="divider"></div>
@@ -3065,37 +3122,28 @@
           <strong>Status:</strong> ${esc(vectorStatusLabel)}<br>
           ${state.ui.vectorReady ? `<strong>Trechos indexados:</strong> ${state.ui.vectorCount || 0}` : ''}
           ${state.ui.vectorIndexing > 0 ? `<br><strong>Indexando…</strong> faltam ${state.ui.vectorIndexing}` : ''}
-          <br><br>
-          <strong>Drive:</strong>
-          ${state.drive.signedIn ? `
-            <br>⤴ Último envio: ${esc(lastPush)}
-            <br>⤵ Último download: ${esc(lastPull)}
-          ` : `<br><em>entre com Google pra sincronizar</em>`}
+          <br><br><strong>Drive:</strong>
+          ${state.drive.signedIn ? `<br>⤴ Envio: ${esc(lastPush)}<br>⤵ Download: ${esc(lastPull)}` : '<br><em>sem Google</em>'}
         </div>
         ${state.drive.signedIn ? `
           <div style="display:flex; gap:6px; margin-top:6px;">
-            <button id="btnForceVectorUpload" style="flex:1;">⤴ Enviar vetores agora</button>
+            <button id="btnForceVectorUpload" style="flex:1;">⤴ Enviar agora</button>
             <button id="btnForceVectorDownload" style="flex:1;">⤵ Baixar do Drive</button>
           </div>
         ` : ''}
         <button id="btnToggleVectorDebug" style="width:100%; margin-top:6px;">
           ${state.ui.debugVector.open ? '▲ Fechar teste' : '🔍 Testar busca vetorial'}
         </button>
-        <button id="btnResetVectorCache" class="danger" style="width:100%; margin-top:6px;">
-          🗑 Resetar cache do modelo
-        </button>
+        <button id="btnResetVectorCache" class="danger" style="width:100%; margin-top:6px;">🗑 Resetar cache do modelo</button>
         ${state.ui.debugVector.open ? renderVectorDebugPanel() : ''}
 
         <div class="divider"></div>
-        <h2>Sincronização (Google Drive)</h2>
+        <h2>Google Drive</h2>
         ${state.drive.signedIn ? `
           <div class="helpbox">Conectado ✓</div>
           <button class="danger" id="btnGoogleSignOut" style="width:100%;">Sair da conta Google</button>
         ` : `
-          <div class="field">
-            <label>Google OAuth Client ID</label>
-            <input type="text" id="googleClientId" value="${esc(state.drive.clientId || '')}" placeholder="xxxxx.apps.googleusercontent.com">
-          </div>
+          <div class="field"><label>OAuth Client ID</label><input type="text" id="googleClientId" value="${esc(state.drive.clientId || '')}"></div>
           <button class="primary" id="btnGoogleSignIn" style="width:100%;">Entrar com Google</button>
         `}
 
@@ -3114,16 +3162,16 @@
           <div class="story-item">
             <div class="info">
               <div class="t">${esc(s.title)}</div>
-              <div class="d">atualizado em ${new Date(s.updatedAt).toLocaleString('pt-BR')}</div>
+              <div class="d">${new Date(s.updatedAt).toLocaleString('pt-BR')}</div>
             </div>
             <button data-open="${s.id}">abrir</button>
             <button class="danger" data-delstory="${s.id}">apagar</button>
           </div>
-        `).join('') || '<p style="color:var(--muted)">Nenhuma aventura ainda.</p>'}
+        `).join('') || '<p style="color:var(--muted)">Nenhuma aventura.</p>'}
         <div class="divider"></div>
         <div style="display:flex; gap:8px;">
           <button class="primary" id="btnCreateStory" style="flex:1;">＋ Nova aventura</button>
-          <button id="btnExportStory">Exportar atual (.json)</button>
+          <button id="btnExportStory">Exportar (.json)</button>
           <label class="button" style="display:inline-flex;align-items:center;">
             <button id="btnImportTrigger">Importar</button>
             <input type="file" id="importInput" accept=".json" style="display:none;">
@@ -3174,6 +3222,13 @@
     bind('#memWorld','input', e => { state.story.memory.world = e.target.value; scheduleSave(); });
     bind('#memNote','input', e => { state.story.memory.authorNote = e.target.value; scheduleSave(); });
     bind('#memSecrets','input', e => { state.story.memory.secrets = e.target.value; scheduleSave(); });
+
+    // radios de idioma
+    $$('input[name="lang"]').forEach(r => r.addEventListener('change', e => {
+      if (e.target.checked) setLanguage(e.target.value);
+    }));
+    bind('#langCustom','input', e => { updateLanguageCustom(e.target.value); });
+
     bind('#btnAddChapter','click', addChapterManual);
     bind('#btnNudgeSummarize','click', summarizeOldTurns);
     bind('#btnNudgeDismiss','click', (e) => {
@@ -3308,15 +3363,15 @@
       const ok = await downloadVectorsFromDrive(state.story.id);
       if (ok){
         state.ui.vectorCount = await countVectors();
-        updateStatus('Vetores sincronizados do Drive.', false);
+        updateStatus('Vetores sincronizados.', false);
       } else {
-        updateStatus('Nada novo pra baixar (ou modelo mudou).', false);
+        updateStatus('Nada novo pra baixar.', false);
       }
       render();
     });
 
     bind('#btnResetVectorCache','click', async () => {
-      const ok = window.confirm('Resetar o cache do modelo?\n\nApaga o modelo baixado e os vetores locais. Os vetores do Drive NÃO são afetados.');
+      const ok = window.confirm('Resetar o cache do modelo?\n\nApaga o modelo baixado e os vetores locais. Os do Drive NÃO são afetados.');
       if (!ok) return;
       try{
         if ('caches' in window){
@@ -3383,7 +3438,7 @@
   async function runDebugVectorSearch(){
     const q = (state.ui.debugVector.query || '').trim();
     if (!q){
-      state.ui.debugVector.error = 'Digite uma frase pra buscar.';
+      state.ui.debugVector.error = 'Digite uma frase.';
       render();
       return;
     }
@@ -3396,7 +3451,6 @@
       const results = await searchRelevantTurns(q, { topK: 8, threshold: 0.2 });
       state.ui.debugVector.results = results;
       state.ui.debugVector.loading = false;
-      state.ui.debugVector.error = null;
     }catch(err){
       state.ui.debugVector.loading = false;
       state.ui.debugVector.error = err.message || String(err);

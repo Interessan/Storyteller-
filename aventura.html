@@ -491,7 +491,6 @@
     max-height:180px; overflow:auto;
   }
 
-  /* ===== Ajustes mobile: header e composer mais compactos ===== */
   @media (max-width: 880px){
     header{ padding: 8px 14px 6px; }
     header .tag{ display: none; }
@@ -845,7 +844,7 @@
   }
 
   // ========================================================================
-  // =============  VECTOR MEMORY (RAG) + DRIVE SYNC — início  ==============
+  // =============  VECTOR MEMORY (RAG) + DRIVE SYNC  =======================
   // ========================================================================
   let _embedder = null;
   let _embedderPromise = null;
@@ -1342,8 +1341,6 @@
     }
   }
   // ========================================================================
-  // =============  VECTOR MEMORY (RAG) + DRIVE SYNC — fim  =================
-  // ========================================================================
 
   async function init(){
     state.index = (await sGet('stories:index')) || [];
@@ -1663,14 +1660,20 @@
     liveTurns.forEach(t => {
       messages.push({ role: t.type === 'user' ? 'user' : 'assistant', content: t.text });
     });
+
+    // IMPORTANTE: o lembrete de POV vai ANTES da ação (não depois).
+    // Motivo: modelos de "continuar texto" tendem a ecoar a ÚLTIMA coisa do prompt.
+    // Se o prompt termina com [Lembrete: ...], o modelo devolve o lembrete em vez de
+    // narrar. Colocando o lembrete ANTES da ação, o prompt termina com a ação do
+    // jogador — que é exatamente o que o modelo deve continuar.
     const voiceShort = (protagCard && protagCard.narrativeVoice)
       ? (' Voz dela: ' + protagCard.narrativeVoice.split(/[.!?]/)[0].slice(0, 110).trim() + '.')
       : '';
-    const povReminder = '[Lembrete: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + ' O protagonista nunca é "você", "ele" nem "ela" — mesmo o nome dela nunca aparece como sujeito da própria ação.]';
+    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + ' O protagonista nunca é "você", "ele" nem "ela".]';
     if (opts.isContinue){
-      messages.push({role:'user', content: '(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)\n\n' + povReminder, isContinueMarker:true});
+      messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
-      messages.push({role:'user', content: actionText + '\n\n' + povReminder});
+      messages.push({role:'user', content: povReminder + '\n\n' + actionText});
     }
     return {messages, sys, liveTurns, ragUsed: relevantMemories.length};
   }
@@ -1754,8 +1757,7 @@
     const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
     const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
 
-    const povReminder = 'Lembrete: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos. O protagonista nunca é "você", "ele" nem "ela" — mesmo o nome dela nunca aparece como sujeito da própria ação.';
-    const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n[' + povReminder + ']\n\n';
+    const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
     const genLength = opts.maxTokens || ((c.maxLength || 250) + 60);
@@ -1868,7 +1870,6 @@
     const rawBeforeClean = result.text;
     result.text = cleanNarrationText(result.text, result.cutOff);
     result.ragUsed = ragUsed || 0;
-    // guarda o cru e o limpo pra debug
     state.ui.lastRaw = {
       time: new Date().toLocaleTimeString('pt-BR'),
       raw: rawBeforeClean,
@@ -1891,15 +1892,12 @@
     t = t.replace(/\*\*(.*?)\*\*/gs, '$1');
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
-    // remove vazamentos do prompt — mas com cuidado pra não apagar a resposta inteira
-    t = t.replace(/\[Lembrete:[^\]]*\]/gi, ' ');
     t = t.replace(/\[Lembrete[^\]]*\]/gi, ' ');
     t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ');
     t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, ' ');
     t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ');
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
-    // remove linhas que SÓ contenham meta-instruções
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -1909,17 +1907,12 @@
       if (l.startsWith('(continue') && l.endsWith(')')) return false;
       return true;
     }).join('\n');
-    // limpa marcadores no início de linha
     t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
-    // normaliza espaços
     t = t.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
-    // REDE DE SEGURANÇA: se limpou demais e sobrou vazio, devolve o original "suavizado"
     if (!t || t.length < 3){
       let fallback = original.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
-      // remove só os marcadores conhecidos no fallback
-      fallback = fallback.replace(/\[Lembrete:[^\]]*\]/gi, ' ')
-                           .replace(/\[Lembrete[^\]]*\]/gi, ' ')
+      fallback = fallback.replace(/\[Lembrete[^\]]*\]/gi, ' ')
                            .replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ')
                            .replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ')
                            .replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ')
@@ -2001,7 +1994,7 @@
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0};
       s.turns.push(aiTurn);
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API → Ver texto cru.', true);
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
       } else {
         const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
         updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
@@ -2032,7 +2025,7 @@
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0};
       s.turns.push(aiTurn);
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API.', true);
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
       } else {
         const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
         updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
@@ -2079,7 +2072,7 @@
       t.altIndex = t.alts.length - 1;
       t.text = result.text;
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ Configurações → Depuração de API.', true);
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
       } else {
         const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
         updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
@@ -2907,7 +2900,6 @@
       <div class="vector-debug-panel">
         <div class="summ-note" style="margin-bottom:8px;">
           Cole qualquer frase (uma ação, um nome, uma lembrança) e veja os trechos mais similares guardados na memória vetorial.
-          Resultados com score abaixo de ${VECTOR_SCORE_THRESHOLD} são cortados.
         </div>
         <input type="text" id="debugVectorQuery" placeholder="Ex: a Carol e a bicicleta" value="${esc(dv.query || '')}">
         <div style="display:flex; gap:6px; margin-top:8px;">
@@ -2918,7 +2910,7 @@
         ${dv.results !== null ? `
           <div style="margin-top:10px;">
             ${dv.results.length === 0
-              ? '<div class="summ-note" style="opacity:.7;">Nenhum resultado acima do limiar. Tente outra frase ou reduza o texto.</div>'
+              ? '<div class="summ-note" style="opacity:.7;">Nenhum resultado acima do limiar.</div>'
               : dv.results.map((r, i) => `
                 <div class="vector-result">
                   <div class="vr-head">#${i+1} · score ${(r.score*100).toFixed(0)}% · ${r.type === 'user' ? 'ação' : 'narração'}${r.archived ? ' · arquivado' : ''}</div>
@@ -2954,21 +2946,19 @@
             <div class="summ-note" style="font-size:11px;">
               <strong>Última chamada:</strong> ${esc(ld.time)} · provedor ${esc(ld.provider)}
             </div>
-            <div class="summ-note" style="font-size:11px; margin-top:6px;">Request enviado:</div>
-            <pre>${esc(JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).slice(0, 1500))}${JSON.stringify((ld.request && ld.request.messages ? ld.request.messages : ld.request), null, 2).length > 1500 ? '\n… (truncado)' : ''}</pre>
             <div class="summ-note" style="font-size:11px; margin-top:6px;">Resposta crua da API:</div>
             <pre>${esc(JSON.stringify(ld.response, null, 2).slice(0, 1500))}${JSON.stringify(ld.response, null, 2).length > 1500 ? '\n… (truncado)' : ''}</pre>
             ${ld.error ? `<div class="summ-note err" style="margin-top:6px;"><strong>Erro:</strong> ${esc(ld.error)}</div>` : ''}
           </div>
-        ` : '<div class="summ-note" style="margin-top:8px; opacity:.7;">Nenhuma chamada registrada ainda nesta sessão.</div>'}
+        ` : '<div class="summ-note" style="margin-top:8px; opacity:.7;">Nenhuma chamada registrada ainda.</div>'}
       </div>
       ${lr ? `
         <div class="raw-response-panel">
           <div class="rrp-title">${lr.wasEmptied ? '⚠ Última resposta foi ZERADA pela limpeza' : '📄 Última resposta (cru vs. limpo)'}</div>
           <div class="summ-note" style="font-size:11px;">
-            <strong>Hora:</strong> ${esc(lr.time)} · <strong>Cortada pelo limite:</strong> ${lr.cutOff ? 'sim' : 'não'} · <strong>Tamanho cru:</strong> ${(lr.raw || '').length} chars · <strong>Tamanho limpo:</strong> ${(lr.cleaned || '').length} chars
+            <strong>Hora:</strong> ${esc(lr.time)} · <strong>Cortada:</strong> ${lr.cutOff ? 'sim' : 'não'} · <strong>Caracteres:</strong> cru ${(lr.raw || '').length} → limpo ${(lr.cleaned || '').length}
           </div>
-          <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Texto CRU (antes de qualquer limpeza):</div>
+          <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Texto CRU (antes da limpeza):</div>
           <pre>${esc((lr.raw || '').slice(0, 1500))}${(lr.raw || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
           <div class="summ-note" style="font-size:11px; margin-top:6px;">🟢 Texto LIMPO (o que aparece na história):</div>
           <pre>${esc((lr.cleaned || '(vazio)').slice(0, 1500))}${(lr.cleaned || '').length > 1500 ? '\n… (truncado)' : ''}</pre>
@@ -2996,8 +2986,8 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão do app: <strong>v38</strong> (correção: resposta vazia após limpeza)
-          ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso nesta aventura: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
+          Versão do app: <strong>v39</strong> (correção: prompt terminava com [Lembrete], IA ecoava)
+          ${s && s.stats && (s.stats.totalTokens || s.stats.totalKudos) ? `· Uso: ${s.stats.totalTokens ? (s.stats.totalTokens + ' tokens') : ''}${s.stats.totalKudos ? (' · ' + s.stats.totalKudos + ' kudos') : ''}` : ''}
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3007,12 +2997,6 @@
             <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (só pra testar — sem NSFW)</option>
           </select>
         </div>
-
-        ${c.mode === 'builtin' ? `
-          <div class="helpbox">
-            Usa o Claude da própria Anthropic, sem precisar de chave. Bom pra confirmar que o app está funcionando, mas o Claude não gera conteúdo adulto/explícito.
-          </div>
-        ` : ''}
 
         ${c.mode === 'horde' ? `
           <div class="field">
@@ -3027,12 +3011,12 @@
             <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2">
           </div>
           <div class="helpbox">
-            Deixar em branco pega "qualquer worker disponível". Recomendação atual: <strong>Skyfall-31B-v4.2</strong> (rápido, bom em RP) ou <strong>Behemoth-X-123B</strong> (mais lento, mais qualidade).
+            Recomendação atual: <strong>Skyfall-31B-v4.2</strong> (rápido, bom em RP).
           </div>
         ` : ''}
         ${c.mode === 'openai' ? `
           <div class="field">
-            <label>Endpoint (URL completa de chat/completions)</label>
+            <label>Endpoint</label>
             <input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://openrouter.ai/api/v1/chat/completions">
           </div>
           <div class="field">
@@ -3042,9 +3026,6 @@
           <div class="field">
             <label>Nome do modelo</label>
             <input type="text" id="oaModel" value="${esc(c.oaModel)}" placeholder="ex: meta-llama/llama-3.1-70b-instruct">
-          </div>
-          <div class="helpbox">
-            Funciona com qualquer serviço que fale o formato de "chat completions" da OpenAI.
           </div>
         ` : ''}
 
@@ -3085,7 +3066,7 @@
           ${state.ui.vectorReady ? `<strong>Trechos indexados:</strong> ${state.ui.vectorCount || 0}` : ''}
           ${state.ui.vectorIndexing > 0 ? `<br><strong>Indexando…</strong> faltam ${state.ui.vectorIndexing}` : ''}
           <br><br>
-          <strong>Sincronização com Drive:</strong>
+          <strong>Drive:</strong>
           ${state.drive.signedIn ? `
             <br>⤴ Último envio: ${esc(lastPush)}
             <br>⤵ Último download: ${esc(lastPull)}
@@ -3108,7 +3089,7 @@
         <div class="divider"></div>
         <h2>Sincronização (Google Drive)</h2>
         ${state.drive.signedIn ? `
-          <div class="helpbox">Conectado ✓ — seus dados e vetores sincronizam automaticamente por essa conta Google.</div>
+          <div class="helpbox">Conectado ✓</div>
           <button class="danger" id="btnGoogleSignOut" style="width:100%;">Sair da conta Google</button>
         ` : `
           <div class="field">
@@ -3335,7 +3316,7 @@
     });
 
     bind('#btnResetVectorCache','click', async () => {
-      const ok = window.confirm('Resetar o cache do modelo?\n\nApaga o modelo baixado e os vetores locais. Os vetores do Drive NÃO são afetados.\n\nNa próxima indexação, o modelo será baixado de novo (~23MB).');
+      const ok = window.confirm('Resetar o cache do modelo?\n\nApaga o modelo baixado e os vetores locais. Os vetores do Drive NÃO são afetados.');
       if (!ok) return;
       try{
         if ('caches' in window){
@@ -3411,9 +3392,7 @@
     state.ui.debugVector.results = null;
     render();
     try{
-      if (!_embedder){
-        await initEmbedder();
-      }
+      if (!_embedder){ await initEmbedder(); }
       const results = await searchRelevantTurns(q, { topK: 8, threshold: 0.2 });
       state.ui.debugVector.results = results;
       state.ui.debugVector.loading = false;
@@ -3437,13 +3416,9 @@
         {role:'user', content:'Teste de conexão. Narre em uma frase: "eu abro a porta".'}
       ];
       const conn = activeConnector();
-      if (conn.mode === 'horde'){
-        await callAiHorde(testMessages, {maxTokens: 40, temperature: 0.5});
-      } else if (conn.mode === 'builtin'){
-        await callBuiltinClaude(testMessages, {maxTokens: 40, temperature: 0.5});
-      } else {
-        await callOpenAICompatible(testMessages, {maxTokens: 40, temperature: 0.5});
-      }
+      if (conn.mode === 'horde') await callAiHorde(testMessages, {maxTokens: 40, temperature: 0.5});
+      else if (conn.mode === 'builtin') await callBuiltinClaude(testMessages, {maxTokens: 40, temperature: 0.5});
+      else await callOpenAICompatible(testMessages, {maxTokens: 40, temperature: 0.5});
       state.ui.debugTestError = null;
     }catch(err){
       state.ui.debugTestError = err.message || String(err);

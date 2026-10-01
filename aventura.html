@@ -171,7 +171,6 @@
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
 
-  /* seletor de idioma */
   .lang-options{ display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
   .lang-option{
     display:flex; align-items:flex-start; gap:8px; padding:9px 11px;
@@ -181,16 +180,10 @@
   }
   .lang-option:hover{ background:rgba(255,255,255,0.06); }
   .lang-option.selected{ background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.25); }
-  .lang-option input[type=radio]{
-    margin:2px 0 0; accent-color: var(--accent); flex-shrink:0;
-  }
+  .lang-option input[type=radio]{ margin:2px 0 0; accent-color: var(--accent); flex-shrink:0; }
   .lang-option .lo-body{ flex:1; min-width:0; }
-  .lang-option .lo-title{
-    font-family:'Inter', sans-serif; font-size:13px; color:var(--text); margin-bottom:2px; font-weight:500;
-  }
-  .lang-option .lo-desc{
-    font-family:'Inter', sans-serif; font-size:11px; color:var(--muted); line-height:1.4;
-  }
+  .lang-option .lo-title{ font-family:'Inter', sans-serif; font-size:13px; color:var(--text); margin-bottom:2px; font-weight:500; }
+  .lang-option .lo-desc{ font-family:'Inter', sans-serif; font-size:11px; color:var(--muted); line-height:1.4; }
 
   .pending-summary{
     background: rgba(239,236,228,0.06);
@@ -210,6 +203,56 @@
   }
   .pending-summary textarea:focus{ outline:none; border-color:rgba(255,255,255,0.3); }
   .pending-actions{ display:flex; gap:6px; margin-top:8px; }
+
+  /* ====== PAINEL DE ATUALIZAÇÕES ====== */
+  .updates-panel{
+    max-width:740px; margin:0 auto 10px;
+    background: rgba(239,236,228,0.06);
+    border: 1px solid rgba(239,236,228,0.22);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .updates-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .updates-title{
+    font-family:'Inter', sans-serif; font-size:11px; color:var(--accent);
+    letter-spacing:.05em; text-transform:uppercase;
+  }
+  .updates-head button{ padding:5px 10px; font-size:11px; }
+  .updates-list{ display:flex; flex-direction:column; gap:8px; }
+  .update-item{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
+    padding:10px 12px;
+  }
+  .update-card-name{
+    font-family:'Inter', sans-serif; font-size:10.5px; color:var(--accent);
+    text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;
+  }
+  .update-diff{
+    display:flex; flex-direction:column; gap:4px; margin-bottom:8px;
+    font-family:'Newsreader', serif; font-size:13.5px; line-height:1.5;
+  }
+  .update-old{
+    color:var(--muted); text-decoration:line-through; opacity:.75;
+    font-size:12.5px;
+  }
+  .update-old-empty{ color:var(--muted); font-style:italic; font-size:12.5px; }
+  .update-new-input{
+    background:var(--ink); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); font-family:'Newsreader', serif; font-size:14px;
+    padding:7px 10px; resize:vertical; width:100%;
+    min-height:38px; line-height:1.5;
+  }
+  .update-new-input:focus{ outline:none; border-color:rgba(255,255,255,0.28); }
+  .update-actions{ display:flex; gap:5px; }
+  .update-actions button{ padding:5px 12px; font-size:11px; }
+  .updates-foot{
+    display:flex; gap:6px; margin-top:10px; padding-top:10px;
+    border-top:1px solid var(--border-soft);
+  }
+  .updates-foot button{ flex:1; font-size:11.5px; padding:8px 12px; }
 
   .card-preview{
     background:var(--panel-2);
@@ -255,6 +298,16 @@
   }
   .card-preview-action:hover{ opacity:1; background:rgba(255,255,255,0.08) !important; }
   .card-preview-del:hover{ color:#f0c9c2 !important; }
+
+  .status-pill{
+    display:inline-block; padding:2px 7px; border-radius:999px;
+    font-family:'Inter', sans-serif; font-size:10px; font-weight:500;
+    letter-spacing:.03em; margin-left:4px; vertical-align:middle;
+  }
+  .status-vivo{ background:rgba(120,180,120,0.2); color:#b8d8b8; border:1px solid rgba(120,180,120,0.35); }
+  .status-morto{ background:rgba(201,106,92,0.2); color:#f0c9c2; border:1px solid rgba(201,106,92,0.4); }
+  .status-desaparecido{ background:rgba(200,180,120,0.18); color:#e0d8b0; border:1px solid rgba(200,180,120,0.35); }
+  .status-desconhecido{ background:rgba(150,150,150,0.15); color:var(--muted); border:1px solid rgba(150,150,150,0.3); }
 
   main{ display:flex; flex-direction:column; min-width:0; min-height:0; }
   .feed{ flex:1; overflow-y:auto; padding:34px 26px 40px; }
@@ -371,7 +424,6 @@
   .story-item .info .t{ font-family:'Newsreader', serif; font-size:15.5px; color:var(--text); }
   .story-item .info .d{ font-family:'Inter', sans-serif; font-size:10.5px; color:var(--muted); }
   .helpbox{ font-family:'Inter', sans-serif; font-size:12.5px; color:var(--muted); line-height:1.6; background:var(--panel-2); border-radius:10px; padding:11px 13px; margin-top:6px; }
-  .helpbox a{ color:var(--text); }
   select{
     width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
     color:var(--text); font-family:'Inter', sans-serif; font-size:12.5px; padding:9px 10px;
@@ -538,6 +590,12 @@
     .status{ font-size: 10.5px; }
     .composer-row{ margin-top: 4px; }
     .composer-row .primary{ padding: 9px 20px; font-size: 12.5px; }
+    .updates-panel{ margin: 0 0 8px; padding: 10px 11px; }
+    .updates-title{ font-size: 10px; }
+    .update-item{ padding: 9px 10px; }
+    .update-diff{ font-size: 13px; }
+    .update-new-input{ font-size: 13.5px; padding: 7px 9px; }
+    .updates-foot button{ font-size: 11px; padding: 7px 10px; }
   }
 
 </style>
@@ -803,7 +861,8 @@
       vectorCount: 0,
       vectorIndexing: 0,
       vectorDriveStatus: '',
-      debugVector: { open: false, query: '', results: null, loading: false, error: null }
+      debugVector: { open: false, query: '', results: null, loading: false, error: null },
+      pendingUpdates: null   // {items: [{id, cardId, cardName, field, fieldLabel, oldValue, value, hasOld}]}
     }
   };
 
@@ -1395,7 +1454,6 @@
     if (typeof s.memory.world !== 'string') s.memory.world = '';
     if (typeof s.memory.authorNote !== 'string') s.memory.authorNote = '';
     if (typeof s.memory.summary !== 'string') s.memory.summary = '';
-    // migração: idioma da narração
     if (typeof s.memory.language !== 'string') s.memory.language = 'pt-BR';
     if (typeof s.memory.languageCustom !== 'string') s.memory.languageCustom = '';
     if (!s.memory.chapters) s.memory.chapters = [];
@@ -1421,6 +1479,11 @@
       if (typeof c.keywords !== 'string') c.keywords = '';
       if (typeof c.narrativeVoice !== 'string') c.narrativeVoice = '';
       if (typeof c.voiceExample !== 'string') c.voiceExample = '';
+      // campos voláteis de auto-evolução
+      if (typeof c.relationship !== 'string') c.relationship = '';
+      if (typeof c.wants !== 'string') c.wants = '';
+      if (typeof c.status !== 'string') c.status = 'vivo';
+      if (typeof c.lastSeenTurn !== 'number') c.lastSeenTurn = -1;
     });
     s.memory.locations.forEach(l => {
       if (typeof l.origin !== 'string') l.origin = '';
@@ -1457,6 +1520,7 @@
     if (s){ state.story = normalizeStory(s); await sSet('settings:lastOpen', id); }
     state.ui.expandedCard = null;
     state.ui.pendingSummary = null;
+    state.ui.pendingUpdates = null;
     render();
     scrollFeedToBottom();
     if (window.indexedDB){
@@ -1526,6 +1590,9 @@
       if (c.personality) bits.push('personalidade: ' + c.personality);
       if (c.relations) bits.push('relações/família: ' + c.relations);
       if (c.desc) bits.push('histórico/papel: ' + c.desc);
+      if (c.relationship) bits.push('relação atual c/ protagonista: ' + c.relationship);
+      if (c.wants) bits.push('quer agora: ' + c.wants);
+      if (c.status && c.status !== 'vivo') bits.push('status: ' + c.status);
       if (c.knows) bits.push('sabe até agora: ' + c.knows);
       return '- ' + bits.join(' | ');
     }
@@ -1604,12 +1671,11 @@
       return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em inglês. NUNCA misture português.';
     }
     if (lang === 'pt-en'){
-      return 'IDIOMA DA NARRAÇÃO: escreva a narração em português brasileiro, MAS pode usar termos e expressões curtas em inglês ocasionalmente — quando fizer sentido para o tom, para o personagem, ou para dar um clima específico (ex: "ele sussurra um "oh my god" baixinho", ou "o cheiro de gasolina, tipo, gasoline, é o que fica"). Nunca troque palavras comuns do cotidiano (chão, olhos, falar) — só use inglês quando for natural para o momento.';
+      return 'IDIOMA DA NARRAÇÃO: escreva a narração em português brasileiro, MAS pode usar termos e expressões curtas em inglês ocasionalmente — quando fizer sentido para o tom, para o personagem, ou para dar um clima específico. Nunca troque palavras comuns do cotidiano (chão, olhos, falar) — só use inglês quando for natural para o momento.';
     }
     if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()){
       return 'IDIOMA E ESTILO DA NARRAÇÃO: ' + mem.languageCustom.trim();
     }
-    // default pt-BR
     return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em português brasileiro. É OBRIGATÓRIO: nunca misture palavras em inglês — nem "floor", nem "speak", nem "those eyes", nem qualquer outra. Se um termo não existe em português, use a tradução mais próxima ou adapte naturalmente dentro da frase em português.';
   }
 
@@ -1630,6 +1696,76 @@
       return `[${i + 1}] (${label} · relevância ${relevance}%) ${short}`;
     });
     return 'TRECHOS RELEVANTES DA HISTÓRIA (recuperados por similaridade com a ação atual — use como contexto vivo, NÃO repita literalmente nem mencione que "lembrou"):\n' + lines.join('\n\n');
+  }
+
+  // Constrói o bloco de instruções pro modelo devolver as atualizações de estado
+  function buildUpdatesInstruction(characters){
+    if (!characters || !characters.length) return '';
+    const codes = characters.map((c, i) => {
+      const code = 'c' + String(i + 1).padStart(3, '0');
+      return '[' + code + '] ' + (c.name || 'Sem nome');
+    }).join('\n');
+    return [
+      'BLOCO DE ATUALIZAÇÕES DE ESTADO (OBRIGATÓRIO):',
+      'Depois de toda a narração, no FINAL ABSOLUTO da resposta, adicione um bloco começando com a linha exata "===UPDATES===" e terminando com a linha exata "===END UPDATES===".',
+      '',
+      'Cada linha entre os marcadores representa UMA mudança real de estado que aconteceu NA CENA narrada. Formato:',
+      '[CÓDIGO] campo: novo valor',
+      '',
+      'Campos válidos (só use estes):',
+      '- relationship: como o personagem se sente em relação à protagonista agora (frase curta, ex: "me protegeu no tiroteio, mais confiança")',
+      '- knows: o que ele sabe até agora (lista completa atualizada, substitui o valor anterior)',
+      '- wants: o que ele quer agora / objetivo atual (frase curta)',
+      '- status: um dos valores exatos: vivo | morto | desaparecido | desconhecido',
+      '',
+      'REGRAS IMPORTANTES:',
+      '- Só inclua mudanças REAIS que aconteceram na cena. NÃO invente.',
+      '- Só inclua mudanças em personagens que participaram ou foram diretamente afetados pela cena.',
+      '- Se um campo NÃO mudou, NÃO inclua aquela linha.',
+      '- Se NADA mudou, deixe o bloco vazio (apenas ===UPDATES=== seguido de ===END UPDATES===).',
+      '- Use APENAS os códigos listados abaixo, no formato [cXXX].',
+      '- NUNCA coloque texto fora dos marcadores depois da narração.',
+      '',
+      'Personagens disponíveis com códigos:',
+      codes
+    ].join('\n');
+  }
+
+  // Cria o mapa {code: cardId} que será usado pra interpretar a resposta
+  function buildCardCodeMap(characters){
+    const map = {};
+    (characters || []).forEach((c, i) => {
+      const code = 'c' + String(i + 1).padStart(3, '0');
+      map[code] = c.id;
+    });
+    return map;
+  }
+
+  // Extrai o bloco ===UPDATES=== do texto e retorna {cleaned, updates}
+  function extractUpdatesFromText(text, codeMap){
+    if (!text) return { cleaned: text || '', updates: [] };
+    const re = /===UPDATES===([\s\S]*?)===END\s*UPDATES===/i;
+    const match = text.match(re);
+    if (!match) return { cleaned: text, updates: [] };
+    const cleaned = (text.slice(0, match.index) + text.slice(match.index + match[0].length)).trim();
+    const raw = (match[1] || '').trim();
+    const updates = [];
+    if (raw){
+      const lines = raw.split('\n');
+      lines.forEach(line => {
+        // formato: [c001] campo: valor
+        const m = line.match(/^\s*\[([A-Za-z0-9]+)\]\s*([a-zA-Z_]+)\s*:\s*(.+?)\s*$/);
+        if (!m) return;
+        const code = m[1];
+        const field = m[2].toLowerCase();
+        const value = m[3].trim();
+        if (!codeMap || !codeMap[code]) return;
+        if (!['relationship', 'knows', 'wants', 'status'].includes(field)) return;
+        if (!value) return;
+        updates.push({ cardId: codeMap[code], field, value });
+      });
+    }
+    return { cleaned, updates };
   }
 
   async function buildPromptMessages(actionText, opts){
@@ -1663,22 +1799,24 @@
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
     const languageLine = buildLanguageInstruction(s.memory);
     const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você", "ele" ou "ela", nem pelo nome, ao narrar a ação, fala ou percepção dele/dela' + (protagName ? (' (nunca "' + protagName + ' faz", nunca "ela faz"/"ele faz" pra se referir a ' + protagName + ')') : '') + '; os outros personagens continuam normalmente em terceira pessoa (nome, "ele", "ela" — "ele diz", "ela sorri"), só o protagonista é sempre "eu".'
-      + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela e os pronomes "ela"/"ele" NUNCA aparecem como sujeito narrando a própria ação — troque sempre por "eu": errado "' + protagName + ' sorri e diz" ou "ela sorri e diz", certo "eu sorrio e digo".') : '')
-      + ' Exemplos do jeito ERRADO (nunca faça isso): "Você entra na sala e vê o General."' + (protagName ? (' / "' + protagName + ' entra na sala e vê o General." / "Ela aponta para o chão, tentando se acalmar."') : '') + ' Exemplo do jeito CERTO: "Eu entro na sala e vejo o General." / "Eu aponto para o chão, tentando me acalmar."';
-    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos, ênfase ou qualquer outra coisa — nada de "*ele sorri*" ou "**ele sorri**", escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão, sem asteriscos ao redor.';
+      + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela e os pronomes "ela"/"ele" NUNCA aparecem como sujeito narrando a própria ação — troque sempre por "eu".') : '')
+      + ' Exemplo do jeito ERRADO: "Você entra na sala e vê o General." / "' + (protagName || 'Ela') + ' entra na sala." Exemplo CERTO: "Eu entro na sala e vejo o General."';
+    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos ou ênfase — escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão.';
 
     const voiceBlock = (protagCard && (protagCard.narrativeVoice || protagCard.voiceExample)) ? [
       'VOZ DA NARRAÇÃO — ISTO É O MAIS IMPORTANTE PRA IMERSÃO:',
-      'A história é narrada PELA ' + (protagName || 'protagonista') + ', não por um narrador neutro. Cada palavra do texto precisa soar como ELA pensaria, sentiria, escolheria. Se a voz diluir, a história quebra.',
+      'A história é narrada PELA ' + (protagName || 'protagonista') + ', não por um narrador neutro. Cada palavra do texto precisa soar como ELA pensaria, sentiria, escolheria.',
       protagCard.narrativeVoice ? ('Como ela narra: ' + protagCard.narrativeVoice) : '',
       protagCard.voiceExample ? ('Exemplos do tom dela (IMITE O ESTILO, não copie o conteúdo):\n' + protagCard.voiceExample) : '',
       'Regras da voz:',
       '- Vocabulário, ritmo de frase e metáforas que ela usaria precisam aparecer naturalmente.',
-      '- Emoções vêm pela FORMA como ela descreve o mundo, não por ela anunciar ("estou com medo"). Mostre pelo detalhe que ela repara, pela palavra que ela escolhe.',
-      '- O jeito dela olhar as coisas colore TUDO: ação, paisagem, diálogo, até uma cena trivial.',
-      '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem, nem em descrição longa.',
-      '- Se ela é sarcástica, a narração tem ironia. Se é ansiosa, frases curtas e hesitantes. Se é poética, descrições sensoriais. Nunca deixe diluir.'
+      '- Emoções vêm pela FORMA como ela descreve o mundo, não por ela anunciar ("estou com medo").',
+      '- O jeito dela olhar as coisas colore TUDO: ação, paisagem, diálogo.',
+      '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem.'
     ].filter(Boolean).join('\n') : '';
+
+    const updatesInstruction = buildUpdatesInstruction(s.memory.characters || []);
+    const codeMap = buildCardCodeMap(s.memory.characters || []);
 
     const sys = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
@@ -1686,8 +1824,8 @@
       povLine,
       voiceBlock,
       formatLine,
-      'Continue a história de forma coerente com tudo que já aconteceu. Escreva cenas vívidas mas não excessivamente longas. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora" — apenas pare no ponto certo pra próxima ação encaixar naturalmente.',
-      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 250) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa — nunca pare no meio de uma frase ou palavra. Se estiver perto do limite, encerre a ideia atual em vez de começar uma nova. Prefira ser mais breve a cortar abruptamente.',
+      'Continue a história de forma coerente com tudo que já aconteceu. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora".',
+      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 250) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       buildVectorMemoryBlock(relevantMemories),
@@ -1697,14 +1835,15 @@
       buildGroupsBlock(activeCards.groups),
       s.memory.secrets ? (
         'SEGREDOS DO MUNDO (conhecimento do narrador, NÃO do protagonista): ' + s.memory.secrets +
-        '\nRegra importante: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história. Não as revele na narração até que a trama naturalmente leve a essa descoberta.'
+        '\nRegra: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história.'
       ) : '',
-      'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores. Nunca faça um personagem (incluindo o protagonista) reagir a uma informação que ele não teve como obter ainda.',
-      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele, mesmo que isso contrarie o que a protagonista (ou o jogador) esperava que acontecesse. Não convenha um personagem a ceder, concordar ou mudar de comportamento só porque seria conveniente pra cena — resistência, teimosia, desconfiança ou indiferença de um personagem são válidas e devem se manter até que algo na história realmente as justifique a mudar.',
+      'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores.',
+      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
-      'REGRA CRÍTICA DE SAÍDA: responda APENAS com a narração em prosa. NÃO copie, repita ou parafraseie nenhuma instrução, lembrete, marcador de sistema ou texto entre colchetes que apareça no prompt. Se você vir "[Lembrete: ...]" ou algo parecido, isso NÃO faz parte da história — é uma instrução interna que você deve ignorar e nunca reproduzir.',
-      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos nem nenhuma marcação — só prosa corrida' + (voiceBlock ? ', E COM A VOZ DE ' + (protagName || 'A PROTAGONISTA').toUpperCase() + ' (vocabulário, ritmo e visão de mundo dela em cada frase — sem isso a imersão quebra)' : '') + '. Os outros personagens reagem com a PRÓPRIA personalidade, não com o que a protagonista espera deles, e não sabem de nada que não tenham visto ou ouvido de fato. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
+      'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa, e SÓ depois (no final absoluto) o bloco ===UPDATES===. NUNCA copie ou parafraseie instruções do prompt. Se você vir "[Lembrete: ...]", ignore.',
+      updatesInstruction,
+      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
     const messages = [{role:'system', content: sys}];
@@ -1716,13 +1855,13 @@
       ? (' Voz dela: ' + protagCard.narrativeVoice.split(/[.!?]/)[0].slice(0, 110).trim() + '.')
       : '';
     const langReminder = buildLanguageReminder(s.memory);
-    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela".]';
+    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela". Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.]';
     if (opts.isContinue){
       messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
       messages.push({role:'user', content: povReminder + '\n\n' + actionText});
     }
-    return {messages, sys, liveTurns, ragUsed: relevantMemories.length};
+    return {messages, sys, liveTurns, ragUsed: relevantMemories.length, codeMap};
   }
 
   function recordDebug(provider, request, response, error){
@@ -1748,34 +1887,26 @@
     attempt = attempt || 1;
     const c = activeConnector();
     if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
-    if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações (ex: openai/gpt-4o-mini).');
+    if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações.');
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const maxTokens = opts.maxTokens || ((c.maxLength || 250) + 60);
+    const maxTokens = opts.maxTokens || ((c.maxLength || 250) + 200);
     const headers = {'Content-Type':'application/json'};
     if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
-    const reqBody = {
-      model: c.oaModel,
-      messages,
-      max_tokens: maxTokens,
-      temperature
-    };
+    const reqBody = { model: c.oaModel, messages, max_tokens: maxTokens, temperature };
     let res, data;
     try{
       res = await fetch(c.oaEndpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
     }catch(err){
-      recordDebug('openai', reqBody, null, err.message + ' — endpoint usado: "' + c.oaEndpoint + '".');
-      throw new Error('Falha de rede ao chamar a API. Confira o endereço do endpoint e veja o modo de depuração nas Configurações.');
+      recordDebug('openai', reqBody, null, err.message);
+      throw new Error('Falha de rede ao chamar a API.');
     }
     if (res.status === 429 && attempt < 4){
       const t = await res.text().catch(()=> '');
       let waitSecs = 4;
-      try{
-        const parsed = JSON.parse(t);
-        waitSecs = (parsed.error && parsed.error.metadata && parsed.error.metadata.retry_after_seconds) || 4;
-      }catch(e){}
+      try{ const parsed = JSON.parse(t); waitSecs = (parsed.error && parsed.error.metadata && parsed.error.metadata.retry_after_seconds) || 4; }catch(e){}
       const retryHeader = res.headers.get('Retry-After');
       if (retryHeader) waitSecs = parseInt(retryHeader) || waitSecs;
-      updateStatus('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's… (tentativa ' + attempt + '/3)', false);
+      updateStatus('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's…', false);
       render();
       await new Promise(r => setTimeout(r, waitSecs * 1000));
       return callOpenAICompatible(messages, opts, attempt + 1);
@@ -1789,11 +1920,11 @@
     recordDebug('openai', reqBody, data);
     const choice = data.choices && data.choices[0];
     const text = choice && (choice.message ? choice.message.content : choice.text);
-    if (!text) throw new Error('Resposta da API veio sem texto (veja o modo de depuração).');
+    if (!text) throw new Error('Resposta da API veio sem texto.');
     const cutOff = choice && (choice.finish_reason === 'length' || choice.finish_reason === 'max_tokens');
     const metaBits = [];
     if (data.usage) metaBits.push('~' + data.usage.total_tokens + ' tokens');
-    if (cutOff) metaBits.push('⚠ cortada pelo limite — aumente "tamanho máx. da resposta" nas Configurações');
+    if (cutOff) metaBits.push('⚠ cortada pelo limite');
     return { text: text.trim(), meta: metaBits.join(' · ') || null, usage: data.usage || null, cutOff };
   }
 
@@ -1803,24 +1934,16 @@
     const sys = messages.find(m => m.role === 'system');
     const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
     const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
-
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const genLength = opts.maxTokens || ((c.maxLength || 250) + 60);
+    const genLength = opts.maxTokens || ((c.maxLength || 250) + 200);
     const estimatedPromptTokens = Math.ceil(promptText.length / 3.2);
     const maxContextLength = Math.min(16384, Math.max(2048, estimatedPromptTokens + genLength + 512));
 
     const body = {
       prompt: promptText,
-      params: {
-        n: 1,
-        max_context_length: maxContextLength,
-        max_length: genLength,
-        temperature,
-        rep_pen: 1.1,
-        top_p: 0.92
-      },
+      params: { n: 1, max_context_length: maxContextLength, max_length: genLength, temperature, rep_pen: 1.1, top_p: 0.92 },
       nsfw: !!c.hordeNsfw,
       trusted_workers: false
     };
@@ -1842,17 +1965,17 @@
     if (!submitRes.ok){
       const t = await submitRes.text().catch(()=> '');
       recordDebug('horde-submit', body, t);
-      throw new Error('AI Horde recusou o pedido (' + submitRes.status + '): ' + t.slice(0,200));
+      throw new Error('AI Horde recusou o pedido (' + submitRes.status + ')');
     }
     const submitData = await submitRes.json();
     recordDebug('horde-submit', body, submitData);
     const jobId = submitData.id;
-    if (!jobId) throw new Error('AI Horde não retornou um id de geração (veja o modo de depuração).');
+    if (!jobId) throw new Error('AI Horde não retornou um id de geração.');
 
     const started = Date.now();
     while (Date.now() - started < 180000){
       await new Promise(r => setTimeout(r, 3000));
-      updateStatus('Na fila do AI Horde… isso pode levar um tempinho, é uma rede comunitária gratuita.', false);
+      updateStatus('Na fila do AI Horde… isso pode levar um tempinho.', false);
       const statusRes = await fetch('https://aihorde.net/api/v2/generate/text/status/' + jobId);
       if (!statusRes.ok) continue;
       const statusData = await statusRes.json();
@@ -1860,16 +1983,12 @@
       if (statusData.done && statusData.generations && statusData.generations.length){
         const raw = statusData.generations[0].text || '';
         const clean = stripEcho(promptText, raw);
-        if (!clean){
-          throw new Error('O worker devolveu uma resposta vazia depois de remover o eco do prompt (veja o modo de depuração).');
-        }
+        if (!clean) throw new Error('Worker devolveu resposta vazia.');
         return { text: clean, meta: submitData.kudos != null ? (submitData.kudos + ' kudos') : null, kudos: submitData.kudos };
       }
-      if (statusData.faulted){
-        throw new Error('A geração falhou no AI Horde. Tente novamente.');
-      }
+      if (statusData.faulted) throw new Error('A geração falhou no AI Horde.');
     }
-    throw new Error('Tempo esgotado esperando o AI Horde. Tente novamente em instantes.');
+    throw new Error('Tempo esgotado esperando o AI Horde.');
   }
 
   async function callBuiltinClaude(messages, opts){
@@ -1879,17 +1998,11 @@
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content
     }));
-    const reqBody = {
-      model: 'claude-sonnet-4-6',
-      max_tokens: opts.maxTokens || 1000,
-      system: sys ? sys.content : undefined,
-      messages: rest
-    };
+    const reqBody = { model: 'claude-sonnet-4-6', max_tokens: opts.maxTokens || 1200, system: sys ? sys.content : undefined, messages: rest };
     let res, data;
     try{
       res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(reqBody)
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(reqBody)
       });
     }catch(err){
       recordDebug('builtin', reqBody, null, err.message);
@@ -1898,25 +2011,29 @@
     if (!res.ok){
       const t = await res.text().catch(()=> '');
       recordDebug('builtin', reqBody, t);
-      throw new Error('API embutida respondeu ' + res.status + ': ' + t.slice(0,200));
+      throw new Error('API embutida respondeu ' + res.status);
     }
     data = await res.json();
     recordDebug('builtin', reqBody, data);
     const textBlock = (data.content || []).find(b => b.type === 'text');
-    if (!textBlock) throw new Error('Resposta veio sem texto (veja o modo de depuração).');
+    if (!textBlock) throw new Error('Resposta veio sem texto.');
     return { text: textBlock.text.trim(), meta: null };
   }
 
   async function generate(actionText, opts){
-    const {messages, ragUsed} = await buildPromptMessages(actionText, opts);
+    const {messages, ragUsed, codeMap} = await buildPromptMessages(actionText, opts);
     const conn = activeConnector();
     let result;
     if (conn.mode === 'horde') result = await callAiHorde(messages);
     else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
     else result = await callOpenAICompatible(messages);
     const rawBeforeClean = result.text;
-    result.text = cleanNarrationText(result.text, result.cutOff);
+    // 1) extrai o bloco de updates do texto cru
+    const {cleaned, updates} = extractUpdatesFromText(rawBeforeClean, codeMap);
+    // 2) aplica limpeza padrão no texto sem os updates
+    result.text = cleanNarrationText(cleaned, result.cutOff);
     result.ragUsed = ragUsed || 0;
+    result.updates = updates;
     state.ui.lastRaw = {
       time: new Date().toLocaleTimeString('pt-BR'),
       raw: rawBeforeClean,
@@ -1945,6 +2062,8 @@
     t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ');
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
+    // remove qualquer resquício do bloco de updates que tenha ficado
+    t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -1952,6 +2071,7 @@
       if (l.startsWith('lembrete:') && l.length < 300) return false;
       if (l.startsWith('[continue') && l.endsWith(']')) return false;
       if (l.startsWith('(continue') && l.endsWith(')')) return false;
+      if (l === '===updates===' || l === '===end updates===') return false;
       return true;
     }).join('\n');
     t = t.replace(/^(###|>>>|AI:|Narrador:|Assistant:|System:)\s*/gim, '');
@@ -1960,10 +2080,7 @@
     if (!t || t.length < 3){
       let fallback = original.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
       fallback = fallback.replace(/\[Lembrete[^\]]*\]/gi, ' ')
-                           .replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ')
-                           .replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ')
-                           .replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ')
-                           .replace(/<\|[^|]*\|>/g, ' ')
+                           .replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ')
                            .replace(/\s+/g, ' ').trim();
       return fallback;
     }
@@ -2022,6 +2139,160 @@
     syncStoryVectors().catch(() => {});
   }
 
+  // ================ AUTO-EVOLUÇÃO: painel de atualizações ================
+
+  const UPDATE_FIELD_LABELS = {
+    relationship: 'Relação',
+    knows: 'Sabe agora',
+    wants: 'Quer agora',
+    status: 'Status'
+  };
+
+  function addPendingUpdates(rawUpdates){
+    if (!rawUpdates || !rawUpdates.length) return;
+    const s = state.story;
+    if (!s) return;
+    if (!state.ui.pendingUpdates) state.ui.pendingUpdates = { items: [] };
+    const existingCardIds = new Set(state.ui.pendingUpdates.items.map(it => it.cardId + '|' + it.field));
+    rawUpdates.forEach(u => {
+      const card = (s.memory.characters || []).find(c => c.id === u.cardId);
+      if (!card) return;
+      const key = u.cardId + '|' + u.field;
+      if (existingCardIds.has(key)) return; // já tem sugestão pra esse campo
+      existingCardIds.add(key);
+      let oldValue = '';
+      if (u.field === 'status') oldValue = card.status || 'vivo';
+      else if (typeof card[u.field] === 'string') oldValue = card[u.field];
+      state.ui.pendingUpdates.items.push({
+        id: uid(),
+        cardId: u.cardId,
+        cardName: card.name || 'Sem nome',
+        field: u.field,
+        fieldLabel: UPDATE_FIELD_LABELS[u.field] || u.field,
+        oldValue: oldValue,
+        value: u.value
+      });
+    });
+  }
+
+  function applyPendingUpdate(itemId){
+    const pu = state.ui.pendingUpdates;
+    if (!pu) return;
+    const item = pu.items.find(it => it.id === itemId);
+    if (!item) return;
+    const s = state.story;
+    const card = (s.memory.characters || []).find(c => c.id === item.cardId);
+    if (!card){
+      // cartão foi apagado — remove
+      pu.items = pu.items.filter(it => it.id !== itemId);
+      if (!pu.items.length) state.ui.pendingUpdates = null;
+      render();
+      return;
+    }
+    // pega o valor atual do input (se existir)
+    const input = document.querySelector('[data-updval="' + itemId + '"]');
+    const newValue = input ? input.value.trim() : item.value;
+    if (!newValue){
+      // valor vazio: trata como descartar
+      pu.items = pu.items.filter(it => it.id !== itemId);
+      if (!pu.items.length) state.ui.pendingUpdates = null;
+      render();
+      return;
+    }
+    card[item.field] = newValue;
+    scheduleSave();
+    pu.items = pu.items.filter(it => it.id !== itemId);
+    if (!pu.items.length) state.ui.pendingUpdates = null;
+    render();
+  }
+
+  function discardPendingUpdate(itemId){
+    const pu = state.ui.pendingUpdates;
+    if (!pu) return;
+    pu.items = pu.items.filter(it => it.id !== itemId);
+    if (!pu.items.length) state.ui.pendingUpdates = null;
+    render();
+  }
+
+  function applyAllPendingUpdates(){
+    const pu = state.ui.pendingUpdates;
+    if (!pu) return;
+    const s = state.story;
+    pu.items.forEach(item => {
+      const card = (s.memory.characters || []).find(c => c.id === item.cardId);
+      if (!card) return;
+      const input = document.querySelector('[data-updval="' + item.id + '"]');
+      const newValue = input ? input.value.trim() : item.value;
+      if (newValue) card[item.field] = newValue;
+    });
+    scheduleSave();
+    state.ui.pendingUpdates = null;
+    updateStatus('Atualizações aplicadas.', false);
+    render();
+  }
+
+  function discardAllPendingUpdates(){
+    state.ui.pendingUpdates = null;
+    render();
+  }
+
+  // Segunda passada: pede ao modelo pra extrair updates do último turno
+  async function extractUpdatesFromLastTurn(){
+    if (state.ui.generating) return;
+    const t = lastAiTurn();
+    if (!t || !t.text){
+      updateStatus('Não há um turno recente pra analisar.', true);
+      return;
+    }
+    const s = state.story;
+    if (!s.memory.characters || !s.memory.characters.length){
+      updateStatus('Nenhum personagem cadastrado pra atualizar.', true);
+      return;
+    }
+    state.ui.generating = true;
+    updateStatus('Extraindo atualizações do último turno…', false);
+    render();
+    try{
+      const codeMap = buildCardCodeMap(s.memory.characters);
+      const updatesInstruction = buildUpdatesInstruction(s.memory.characters);
+      const sys = [
+        'Você é um assistente que analisa uma narração de RPG já escrita e identifica mudanças de estado dos personagens que aconteceram NAQUELA cena.',
+        'Responda APENAS com o bloco ===UPDATES=== conforme as regras abaixo. Se nada mudou, deixe o bloco vazio (só as duas linhas de marcador).',
+        '',
+        'REGRAS:',
+        '- Só inclua mudanças REAIS que aconteceram na cena narrada.',
+        '- Só inclua personagens que participaram ou foram diretamente afetados.',
+        '- Se um campo não mudou, não inclua.',
+        '- NUNCA escreva nada fora dos marcadores.',
+        '',
+        updatesInstruction
+      ].join('\n');
+      const messages = [
+        {role:'system', content: sys},
+        {role:'user', content: 'Narração para analisar:\n\n' + t.text}
+      ];
+      const conn = activeConnector();
+      let result;
+      const opts = {maxTokens: 400, temperature: 0.2};
+      if (conn.mode === 'horde') result = await callAiHorde(messages, opts);
+      else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages, opts);
+      else result = await callOpenAICompatible(messages, opts);
+      const {updates} = extractUpdatesFromText(result.text, codeMap);
+      if (updates.length){
+        addPendingUpdates(updates);
+        updateStatus(updates.length + ' atualização' + (updates.length > 1 ? 'ões' : '') + ' extraída' + (updates.length > 1 ? 's' : '') + '.', false);
+      } else {
+        updateStatus('Nenhuma mudança de estado encontrada neste turno.', false);
+      }
+    }catch(err){
+      updateStatus('Erro ao extrair: ' + err.message, true);
+    }
+    state.ui.generating = false;
+    render();
+  }
+
+  // ========================================================================
+
   async function sendAction(){
     const raw = state.ui.composerText;
     const text = raw.trim();
@@ -2040,11 +2311,16 @@
       const result = await generate(text);
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0};
       s.turns.push(aiTurn);
+      // registra atualizações sugeridas
+      if (result.updates && result.updates.length){
+        addPendingUpdates(result.updates);
+      }
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
+        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração.', true);
       } else {
         const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
+        const updNote = (result.updates && result.updates.length) ? (' · 📝 ' + result.updates.length + ' atualização' + (result.updates.length > 1 ? 'ões' : '')) : '';
+        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote + updNote, false);
       }
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
@@ -2071,11 +2347,15 @@
       const result = await generate('', {isContinue:true});
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0};
       s.turns.push(aiTurn);
+      if (result.updates && result.updates.length){
+        addPendingUpdates(result.updates);
+      }
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
+        updateStatus('⚠ Resposta vazia após limpeza.', true);
       } else {
         const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote, false);
+        const updNote = (result.updates && result.updates.length) ? (' · 📝 ' + result.updates.length + ' atualização' + (result.updates.length > 1 ? 'ões' : '')) : '';
+        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote + updNote, false);
       }
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
@@ -2118,12 +2398,11 @@
       t.alts.push(result.text);
       t.altIndex = t.alts.length - 1;
       t.text = result.text;
-      if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
-        updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração de API.', true);
-      } else {
-        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-        updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
+      if (result.updates && result.updates.length){
+        addPendingUpdates(result.updates);
       }
+      const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória') : '';
+      updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(t).catch(() => {});
       }
@@ -2155,7 +2434,7 @@
     pushUndo('erase');
     const removed = s.turns.pop();
     scheduleSave();
-    updateStatus('Último trecho apagado — dá pra desfazer se quiser.', false);
+    updateStatus('Último trecho apagado.', false);
     render();
     if (removed) removeTurnVector(removed.id).catch(() => {});
   }
@@ -2169,7 +2448,7 @@
     s.turns = s.turns.slice(0, idx + 1);
     state.ui.openActionsFor = null;
     scheduleSave();
-    updateStatus('Voltou pro ponto #' + (idx + 1) + ' — dá pra desfazer se quiser.', false);
+    updateStatus('Voltou pro ponto #' + (idx + 1) + '.', false);
     render();
     removed.forEach(t => removeTurnVector(t.id).catch(() => {}));
   }
@@ -2183,7 +2462,7 @@
     if (t) t.text = val;
     editingTurnId = null;
     scheduleSave();
-    updateStatus('Edição salva — dá pra desfazer se quiser.', false);
+    updateStatus('Edição salva.', false);
     render();
     if (t && _embedder) saveTurnVector(t).catch(() => {});
   }
@@ -2193,7 +2472,7 @@
     s.turns = s.turns.filter(t => t.id !== id);
     state.ui.openActionsFor = null;
     scheduleSave();
-    updateStatus('Trecho apagado — dá pra desfazer se quiser.', false);
+    updateStatus('Trecho apagado.', false);
     render();
     removeTurnVector(id).catch(() => {});
   }
@@ -2224,10 +2503,10 @@
       '',
       'INSTRUÇÕES DO RESUMO:',
       '- Escreva em prosa corrida, em TERCEIRA PESSOA neutra.',
-      '- Preserve obrigatoriamente: decisões importantes tomadas, promessas feitas, relações que mudaram (alianças, desconfianças, afetos), lugares visitados, objetos ganhos ou perdidos, revelações descobertas, e personagens apresentados com traços marcantes.',
-      '- Mantenha os nomes próprios EXATAMENTE como aparecem no texto original.',
-      '- 4 a 6 frases curtas. Direto ao ponto, sem floreio.',
-      '- NÃO invente nada que não esteja no texto original.',
+      '- Preserve: decisões importantes, promessas, relações que mudaram, lugares visitados, objetos ganhos/perdidos, revelações, personagens apresentados.',
+      '- Mantenha os nomes próprios EXATAMENTE como aparecem.',
+      '- 4 a 6 frases curtas.',
+      '- NÃO invente nada.',
       '- Responda APENAS com o resumo.'
     ].filter(Boolean).join('\n');
 
@@ -2248,7 +2527,7 @@
         text: cleanNarrationText(result.text, result.cutOff),
         chunkIds: chunk.map(t => t.id)
       };
-      updateStatus('Resumo pronto — revise abaixo e clique em "Aceitar" se estiver bom.', false);
+      updateStatus('Resumo pronto — revise abaixo.', false);
     }catch(err){
       updateStatus('Erro ao resumir: ' + err.message, true);
     }
@@ -2273,7 +2552,7 @@
       if (t) t.archived = true;
     });
     state.ui.pendingSummary = null;
-    updateStatus('Resumo aceito — ' + existingIds.length + ' falas saíram do contexto ativo.', false);
+    updateStatus('Resumo aceito.', false);
     scheduleSave();
     render();
   }
@@ -2291,7 +2570,7 @@
     if (type === 'group') return state.story.memory.groups;
   }
   function blankCard(type){
-    if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false, alwaysOn:true, keywords:'', narrativeVoice:'', voiceExample:''};
+    if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false, alwaysOn:true, keywords:'', narrativeVoice:'', voiceExample:'', relationship:'', wants:'', status:'vivo', lastSeenTurn:-1};
     if (type === 'loc') return {id: uid(), name:'', origin:'', desc:'', notes:'', alwaysOn:true, keywords:''};
     if (type === 'group') return {id: uid(), name:'', members:'', dynamic:'', alwaysOn:true, keywords:''};
   }
@@ -2327,6 +2606,11 @@
     if (state.ui.expandedCard && state.ui.expandedCard.id === id){
       state.ui.expandedCard = null;
     }
+    // remove sugestões de update pendentes desse card
+    if (state.ui.pendingUpdates){
+      state.ui.pendingUpdates.items = state.ui.pendingUpdates.items.filter(it => it.cardId !== id);
+      if (!state.ui.pendingUpdates.items.length) state.ui.pendingUpdates = null;
+    }
     scheduleSave();
     render();
   }
@@ -2356,9 +2640,9 @@
     const hasIds = ch.archivedTurnIds && ch.archivedTurnIds.length;
     let msg = 'Apagar este capítulo resumido?';
     if (hasIds){
-      msg += '\n\nAs ' + ch.archivedTurnIds.length + ' falas originais que ele resumia vão voltar ao contexto ativo.';
+      msg += '\n\nAs ' + ch.archivedTurnIds.length + ' falas originais vão voltar ao contexto ativo.';
     } else {
-      msg += '\n\n(Este capítulo foi criado numa versão antiga — não dá pra restaurar as falas originais automaticamente.)';
+      msg += '\n\n(Este capítulo é de versão antiga — não dá pra restaurar automaticamente.)';
     }
     const ok = window.confirm(msg);
     if (!ok) return;
@@ -2377,15 +2661,11 @@
     const s = state.story;
     const archivedCount = s.turns.filter(t => t.archived).length;
     if (!archivedCount){
-      updateStatus('Não há nenhuma fala arquivada pra restaurar.', false);
+      updateStatus('Não há falas arquivadas pra restaurar.', false);
       render();
       return;
     }
-    const ok = window.confirm(
-      'Desarquivar TODAS as ' + archivedCount + ' falas arquivadas?\n\n' +
-      'Elas voltam pro contexto ativo da IA (podendo estourar o orçamento de tokens).\n' +
-      'Os capítulos resumidos NÃO são apagados — só as falas voltam a ficar visíveis pro modelo.'
-    );
+    const ok = window.confirm('Desarquivar TODAS as ' + archivedCount + ' falas arquivadas?');
     if (!ok) return;
     s.turns.forEach(t => { if (t.archived) t.archived = false; });
     updateStatus(archivedCount + ' falas desarquivadas.', false);
@@ -2416,7 +2696,7 @@
 
   function getCardPreview(type, c){
     let raw = '';
-    if (type === 'char') raw = c.desc || c.personality || c.appearance || c.relations || '';
+    if (type === 'char') raw = c.relationship || c.desc || c.personality || c.appearance || c.relations || '';
     else if (type === 'loc') raw = c.desc || c.notes || '';
     else raw = c.dynamic || c.members || '';
     raw = (raw || '').replace(/\s+/g, ' ').trim();
@@ -2424,14 +2704,21 @@
     return raw;
   }
 
+  function renderStatusPill(status){
+    if (!status || status === 'vivo') return '';
+    const label = status.charAt(0).toUpperCase() + status.slice(1);
+    return '<span class="status-pill status-' + esc(status) + '">' + esc(label) + '</span>';
+  }
+
   function renderCardPreview(type, c){
     const preview = getCardPreview(type, c);
     const badge = (type === 'char' && c.isProtagonist) ? '<span class="protag-badge">protagonista</span>' : '';
+    const statusPill = (type === 'char') ? renderStatusPill(c.status) : '';
     return `
       <div class="card-preview" data-cexpand="${type}:${c.id}">
         <div class="card-preview-head">
           <div class="card-preview-name">${esc(c.name || 'Sem nome')}</div>
-          ${badge}
+          ${badge}${statusPill}
           <span style="flex:1;"></span>
           <div class="card-preview-actions">
             <button class="icon card-preview-action" data-cdup="${type}:${c.id}" title="duplicar">⧉</button>
@@ -2451,6 +2738,7 @@
     state.story = s;
     state.ui.expandedCard = null;
     state.ui.pendingSummary = null;
+    state.ui.pendingUpdates = null;
     await sSet('story:' + s.id, s);
     await sSet('stories:index', state.index);
     await sSet('settings:lastOpen', s.id);
@@ -2459,7 +2747,7 @@
   }
 
   async function deleteStory(id){
-    const ok = window.confirm('Apagar esta aventura pra sempre? Não dá pra desfazer.');
+    const ok = window.confirm('Apagar esta aventura pra sempre?');
     if (!ok) return;
     await sDelete('story:' + id);
     if (state.drive.signedIn){
@@ -2468,7 +2756,7 @@
         if (file){
           await driveFetch('https://www.googleapis.com/drive/v3/files/' + file.id, { method: 'DELETE' });
         }
-      }catch(e){ console.warn('falha ao apagar vetores do Drive:', e); }
+      }catch(e){}
     }
     try{
       const db = await openVectorDb();
@@ -2515,6 +2803,7 @@
         state.story = s;
         state.ui.expandedCard = null;
         state.ui.pendingSummary = null;
+        state.ui.pendingUpdates = null;
         await sSet('story:' + s.id, s);
         await sSet('stories:index', state.index);
         await sSet('settings:lastOpen', s.id);
@@ -2529,6 +2818,40 @@
   }
 
   function esc(str){ return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function renderUpdatesPanel(){
+    const pu = state.ui.pendingUpdates;
+    if (!pu || !pu.items.length) return '';
+    return `
+      <div class="updates-panel">
+        <div class="updates-head">
+          <span class="updates-title">📝 ${pu.items.length} atualizaç${pu.items.length > 1 ? 'ões' : 'ão'} sugerida${pu.items.length > 1 ? 's' : ''} pela IA</span>
+          <button class="ghost" id="btnDiscardAllUpdates">✕ fechar</button>
+        </div>
+        <div class="updates-list">
+          ${pu.items.map(item => `
+            <div class="update-item">
+              <div class="update-card-name">${esc(item.cardName)} · ${esc(item.fieldLabel)}</div>
+              <div class="update-diff">
+                ${item.oldValue
+                  ? `<div class="update-old">${esc(item.oldValue)}</div>`
+                  : `<div class="update-old-empty">(vazio)</div>`}
+                <textarea class="update-new-input" data-updval="${item.id}" rows="2">${esc(item.value)}</textarea>
+              </div>
+              <div class="update-actions">
+                <button class="primary" data-updapply="${item.id}">✓ aplicar</button>
+                <button data-upddiscard="${item.id}">✕ descartar</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="updates-foot">
+          <button class="primary" id="btnApplyAllUpdates">✓ Aplicar tudo</button>
+          <button id="btnDiscardAllUpdates2">✕ Descartar tudo</button>
+        </div>
+      </div>
+    `;
+  }
 
   function render(){
     const app = document.getElementById('app');
@@ -2559,7 +2882,7 @@
     if (state.ui.vectorDriveStatus){
       vectorStatus = state.ui.vectorDriveStatus;
     } else if (state.ui.vectorLoading){
-      vectorStatus = '🧠 Preparando memória vetorial… (primeira vez: baixando modelo ~23MB)';
+      vectorStatus = '🧠 Preparando memória vetorial… (~23MB)';
     } else if (state.ui.vectorError){
       vectorStatus = '⚠ Memória vetorial indisponível: ' + state.ui.vectorError;
     } else if (state.ui.vectorIndexing > 0){
@@ -2572,7 +2895,7 @@
     app.innerHTML = `
       <header>
         <div class="titlewrap">
-          <span class="tag">Aventura</span>
+          <span class="tag">Aventura 1.0</span>
           <h1 id="titleField" contenteditable="true" spellcheck="false">${esc(s.title)}</h1>
         </div>
         <div class="btns">
@@ -2580,7 +2903,7 @@
           <button class="icon" id="btnMemory" title="Memória, personagens, locais...">📖</button>
           <button class="icon" id="btnStories" title="Minhas histórias">📚</button>
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
-          <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout celular/PC manualmente">${state.ui.forcedLayout === 'mobile' ? '📱' : state.ui.forcedLayout === 'desktop' ? '🖥️' : '🔄'}</button>
+          <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout">${state.ui.forcedLayout === 'mobile' ? '📱' : state.ui.forcedLayout === 'desktop' ? '🖥️' : '🔄'}</button>
           <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
         </div>
       </header>
@@ -2612,6 +2935,7 @@
           </div>
           <div class="composer" style="${editingTurnId ? 'display:none;' : ''}">
             <div class="composer-inner">
+              ${renderUpdatesPanel()}
               <textarea id="composer" placeholder="O que eu faço agora?" rows="2">${esc(state.ui.composerText)}</textarea>
               <div id="tokenEstimate" class="token-estimate mono"></div>
 
@@ -2632,11 +2956,12 @@
                     <span class="retry-count mono">${(lt.altIndex||0)+1}/${lt.alts.length}</span>
                     <button class="retry-nav" data-altnav="${lt.id}:1" ${lt.altIndex>=lt.alts.length-1?'disabled':''} title="Próxima tentativa">›</button>
                   ` : ''; })()}
-                  <button id="btnRetryOptions" title="Dar uma instrução específica pro retry">🎯</button>
+                  <button id="btnRetryOptions" title="Instrução específica pro retry">🎯</button>
                 </div>
               </div>
               <div class="dungeon-bar dungeon-bar-secondary">
-                <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer última mudança">↩ Desfazer</button>
+                <button id="btnExtractUpdates" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Pede à IA pra extrair mudanças de estado do último turno">🧠 extrair</button>
+                <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer">↩ Desfazer</button>
                 <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
                 <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
                 <span class="spacer"></span>
@@ -2693,14 +3018,14 @@
               <input type="radio" name="lang" value="pt-BR" ${currentLang === 'pt-BR' ? 'checked' : ''}>
               <div class="lo-body">
                 <div class="lo-title">🇧🇷 Português brasileiro</div>
-                <div class="lo-desc">Narração 100% em PT-BR, sem palavras em inglês. Ideal para histórias brasileiras.</div>
+                <div class="lo-desc">Narração 100% em PT-BR, sem palavras em inglês.</div>
               </div>
             </label>
             <label class="lang-option ${currentLang === 'pt-en' ? 'selected' : ''}">
               <input type="radio" name="lang" value="pt-en" ${currentLang === 'pt-en' ? 'checked' : ''}>
               <div class="lo-body">
                 <div class="lo-title">🌎 PT-BR com termos em inglês</div>
-                <div class="lo-desc">Narração em português, mas com inglês ocasional quando faz sentido pro personagem ou clima.</div>
+                <div class="lo-desc">Inglês ocasional quando faz sentido pro clima.</div>
               </div>
             </label>
             <label class="lang-option ${currentLang === 'en' ? 'selected' : ''}">
@@ -2714,16 +3039,13 @@
               <input type="radio" name="lang" value="custom" ${currentLang === 'custom' ? 'checked' : ''}>
               <div class="lo-body">
                 <div class="lo-title">✏️ Personalizado</div>
-                <div class="lo-desc">Você escreve a instrução exata de idioma/estilo.</div>
+                <div class="lo-desc">Você escreve a instrução exata.</div>
               </div>
             </label>
           </div>
           ${currentLang === 'custom' ? `
-            <textarea id="langCustom" rows="3" placeholder="ex: Narre em português brasileiro, mas todos os diálogos de John (americano) em inglês com tradução livre em itálico depois.">${esc(s.memory.languageCustom || '')}</textarea>
+            <textarea id="langCustom" rows="3" placeholder="ex: Narração em PT-BR, diálogos do John em inglês.">${esc(s.memory.languageCustom || '')}</textarea>
           ` : ''}
-          <div class="summ-note" style="margin-top:6px; font-size:11px;">
-            ⚠️ Mesmo com a instrução forte, modelos treinados em inglês podem vazar palavras ocasionalmente. Se acontecer muito, mude para "Português brasileiro" ou teste outro modelo.
-          </div>
         </div>
 
         <div class="field">
@@ -2732,7 +3054,7 @@
         </div>
         <div class="field">
           <label>Notas do autor</label>
-          <textarea id="memNote" rows="2" placeholder="Regras fixas, tom, coisas que nunca mudam...">${esc(s.memory.authorNote)}</textarea>
+          <textarea id="memNote" rows="2" placeholder="Regras fixas, tom...">${esc(s.memory.authorNote)}</textarea>
         </div>
         <div class="field">
           <label>Capítulos resumidos (editáveis)</label>
@@ -2744,7 +3066,7 @@
             const dismissedAt = state.ui.nudgeDismissedAt || 0;
             if (dropped >= 10 && dropped > dismissedAt && !state.ui.summarizing && !ps){
               return `<div class="nudge-banner">
-                ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo. Resumir agora evita perder esses detalhes.
+                ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo.
                 <div style="margin-top:7px; display:flex; gap:6px;">
                   <button id="btnNudgeSummarize">🧠 Resumir agora</button>
                   <button id="btnNudgeDismiss" class="ghost" data-dropped="${dropped}">dispensar</button>
@@ -2760,7 +3082,7 @@
               <div class="summ-note" style="margin-bottom:8px;">A IA resumiu ${ps.chunkIds.length} falas.</div>
               <textarea id="pendingSummaryText" rows="7">${esc(ps.text)}</textarea>
               <div class="pending-actions">
-                <button class="primary" id="btnAcceptSummary" style="flex:1;">✓ Aceitar e arquivar</button>
+                <button class="primary" id="btnAcceptSummary" style="flex:1;">✓ Aceitar</button>
                 <button id="btnDiscardSummary">✕ Descartar</button>
               </div>
             </div>
@@ -2769,14 +3091,14 @@
           ${s.memory.chapters.map(ch => `
             <div class="char-card" data-chapterid="${ch.id}" style="margin-bottom:8px;">
               <div class="ccard-top">
-                <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título do capítulo" style="flex:1;">
-                <button class="danger icon" data-chapterdel="${ch.id}" title="apagar capítulo (restaura as falas originais)">✕</button>
+                <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título" style="flex:1;">
+                <button class="danger icon" data-chapterdel="${ch.id}" title="apagar (restaura as falas originais)">✕</button>
               </div>
-              <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo desse trecho da história...">${esc(ch.text)}</textarea>
+              <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo...">${esc(ch.text)}</textarea>
               <div class="summ-note" style="font-size:10.5px; margin-top:4px; opacity:.7;">
                 ${ch.archivedTurnIds && ch.archivedTurnIds.length
-                  ? '📎 resume ' + ch.archivedTurnIds.length + ' falas arquivadas (apagar restaura)'
-                  : '⚠ capítulo antigo — falas originais não rastreadas'}
+                  ? '📎 resume ' + ch.archivedTurnIds.length + ' falas arquivadas'
+                  : '⚠ capítulo antigo'}
               </div>
             </div>
           `).join('') || '<div class="summ-note">Nenhum capítulo ainda.</div>'}
@@ -2799,7 +3121,7 @@
     return `
       <div>
         <h2>Personagens</h2>
-        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar em tela cheia.</div>
+        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar. A IA sugere mudanças de relação/querer/status ao final de cada resposta — você revisa antes de aplicar.</div>
         ${s.memory.characters.map(c => renderCardPreview('char', c)).join('')}
         <button data-addtype="char" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar personagem</button>
       </div>
@@ -2811,7 +3133,7 @@
     return `
       <div>
         <h2>Locais</h2>
-        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar em tela cheia.</div>
+        <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar.</div>
         ${s.memory.locations.map(l => renderCardPreview('loc', l)).join('')}
         <button data-addtype="loc" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar local</button>
       </div>
@@ -2836,10 +3158,9 @@
       <div>
         <h2>Segredos do mundo</h2>
         <div class="field">
-          <label>Oculto do protagonista (só o narrador sabe)</label>
-          <textarea id="memSecrets" rows="8" placeholder="Coisas que existem na história mas ainda não foram descobertas...">${esc(s.memory.secrets)}</textarea>
+          <label>Oculto do protagonista</label>
+          <textarea id="memSecrets" rows="8" placeholder="Coisas que existem mas ainda não foram descobertas...">${esc(s.memory.secrets)}</textarea>
         </div>
-        <div class="summ-note">A IA não revela nada disso até que a trama naturalmente leve a descoberta.</div>
       </div>
     `;
   }
@@ -2869,16 +3190,30 @@
         <label class="protag-check" style="color:var(--muted);">
           <input type="checkbox" data-alwayson="char:${c.id}" ${c.alwaysOn!==false?'checked':''}> sempre incluir no contexto
         </label>
-        ${c.alwaysOn===false ? `<input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras, separadas por vírgula" style="margin-top:6px;">` : ''}
+        ${c.alwaysOn===false ? `<input type="text" data-ctype="char" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-top:6px;">` : ''}
 
         ${c.isProtagonist ? `
           <div class="voice-block" style="margin-top:14px;">
             <div class="voice-title">🎭 Voz da narração</div>
-            <div class="voice-hint">Como ela narra? Ritmo, vocabulário, manias, o jeito de olhar o mundo.</div>
-            <textarea data-ctype="char" data-cid="${c.id}" data-cfield="narrativeVoice" rows="4" placeholder="ex: frases curtas e cortantes, ironia constante, nunca admite medo...">${esc(c.narrativeVoice)}</textarea>
-            <textarea data-ctype="char" data-cid="${c.id}" data-cfield="voiceExample" rows="5" placeholder="2-3 frases de exemplo no tom dela.">${esc(c.voiceExample)}</textarea>
+            <div class="voice-hint">Como ela narra? Ritmo, vocabulário, manias.</div>
+            <textarea data-ctype="char" data-cid="${c.id}" data-cfield="narrativeVoice" rows="4" placeholder="ex: frases curtas e cortantes...">${esc(c.narrativeVoice)}</textarea>
+            <textarea data-ctype="char" data-cid="${c.id}" data-cfield="voiceExample" rows="5" placeholder="2-3 frases de exemplo.">${esc(c.voiceExample)}</textarea>
           </div>
         ` : ''}
+
+        <div class="field-inline-label">Status</div>
+        <select data-ctype="char" data-cid="${c.id}" data-cfield="status" style="width:100%;">
+          <option value="vivo" ${c.status==='vivo'?'selected':''}>vivo</option>
+          <option value="morto" ${c.status==='morto'?'selected':''}>morto</option>
+          <option value="desaparecido" ${c.status==='desaparecido'?'selected':''}>desaparecido</option>
+          <option value="desconhecido" ${c.status==='desconhecido'?'selected':''}>desconhecido</option>
+        </select>
+
+        <div class="field-inline-label">Relação atual com a protagonista</div>
+        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relationship" rows="2" placeholder="Como ele se sente em relação à protagonista agora...">${esc(c.relationship || '')}</textarea>
+
+        <div class="field-inline-label">O que ele quer agora</div>
+        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="wants" rows="2" placeholder="Objetivo atual dele (agenda própria)...">${esc(c.wants || '')}</textarea>
 
         <div class="field-inline-label">Aparência física</div>
         <textarea data-ctype="char" data-cid="${c.id}" data-cfield="appearance" rows="3" placeholder="...">${esc(c.appearance)}</textarea>
@@ -2909,7 +3244,7 @@
         <textarea data-ctype="loc" data-cid="${c.id}" data-cfield="desc" rows="4" placeholder="Como é esse lugar...">${esc(c.desc)}</textarea>
 
         <div class="field-inline-label">Detalhes importantes</div>
-        <textarea data-ctype="loc" data-cid="${c.id}" data-cfield="notes" rows="4" placeholder="Perigos, segredos, quem mora lá...">${esc(c.notes)}</textarea>
+        <textarea data-ctype="loc" data-cid="${c.id}" data-cfield="notes" rows="4" placeholder="Perigos, segredos...">${esc(c.notes)}</textarea>
       `;
     } else {
       body = `
@@ -2919,10 +3254,10 @@
         ${c.alwaysOn===false ? `<input type="text" data-ctype="group" data-cid="${c.id}" data-cfield="keywords" value="${esc(c.keywords)}" placeholder="Apelidos/palavras-chave extras" style="margin-top:6px;">` : ''}
 
         <div class="field-inline-label">Membros</div>
-        <textarea data-ctype="group" data-cid="${c.id}" data-cfield="members" rows="3" placeholder="Quem faz parte (nomes)...">${esc(c.members)}</textarea>
+        <textarea data-ctype="group" data-cid="${c.id}" data-cfield="members" rows="3" placeholder="Quem faz parte...">${esc(c.members)}</textarea>
 
         <div class="field-inline-label">Dinâmica / relação entre eles</div>
-        <textarea data-ctype="group" data-cid="${c.id}" data-cfield="dynamic" rows="4" placeholder="Como se tratam, hierarquia, tensões...">${esc(c.dynamic)}</textarea>
+        <textarea data-ctype="group" data-cid="${c.id}" data-cfield="dynamic" rows="4" placeholder="Como se tratam...">${esc(c.dynamic)}</textarea>
       `;
     }
 
@@ -3047,7 +3382,7 @@
             ${esc(lr.time)} · cru ${(lr.raw || '').length} → limpo ${(lr.cleaned || '').length} chars
           </div>
           <div class="summ-note" style="font-size:11px; margin-top:8px;">🔴 Cru:</div>
-          <pre>${esc((lr.raw || '').slice(0, 800))}${(lr.raw || '').length > 800 ? '\n…' : ''}</pre>
+          <pre>${esc((lr.raw || '').slice(0, 1200))}${(lr.raw || '').length > 1200 ? '\n…' : ''}</pre>
           <div class="summ-note" style="font-size:11px; margin-top:6px;">🟢 Limpo:</div>
           <pre>${esc((lr.cleaned || '(vazio)').slice(0, 800))}${(lr.cleaned || '').length > 800 ? '\n…' : ''}</pre>
         </div>
@@ -3073,32 +3408,24 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>v40</strong> (idioma por história)
+          Versão: <strong>1.0-preview</strong> — auto-evolução de fichas
         </div>
         <div class="field">
           <label>Provedor</label>
           <select id="connMode">
-            <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, comunitário, aceita NSFW)</option>
+            <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, aceita NSFW)</option>
             <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI</option>
             <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (sem NSFW)</option>
           </select>
         </div>
 
         ${c.mode === 'horde' ? `
-          <div class="field">
-            <label>Chave do AI Horde (opcional)</label>
-            <input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo">
-          </div>
-          <div class="field">
-            <label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir NSFW</label>
-          </div>
-          <div class="field">
-            <label>Modelos preferidos (separados por vírgula)</label>
-            <input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2">
-          </div>
+          <div class="field"><label>Chave do AI Horde</label><input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo"></div>
+          <div class="field"><label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir NSFW</label></div>
+          <div class="field"><label>Modelos preferidos (separados por vírgula)</label><input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2"></div>
         ` : ''}
         ${c.mode === 'openai' ? `
-          <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://openrouter.ai/api/v1/chat/completions"></div>
+          <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}"></div>
           <div class="field"><label>Chave</label><input type="text" id="oaKey" value="${esc(c.oaKey)}"></div>
           <div class="field"><label>Modelo</label><input type="text" id="oaModel" value="${esc(c.oaModel)}"></div>
         ` : ''}
@@ -3223,7 +3550,6 @@
     bind('#memNote','input', e => { state.story.memory.authorNote = e.target.value; scheduleSave(); });
     bind('#memSecrets','input', e => { state.story.memory.secrets = e.target.value; scheduleSave(); });
 
-    // radios de idioma
     $$('input[name="lang"]').forEach(r => r.addEventListener('change', e => {
       if (e.target.checked) setLanguage(e.target.value);
     }));
@@ -3261,6 +3587,11 @@
     $$('[data-cfield]').forEach(inp => inp.addEventListener('input', e => {
       updateCard(e.target.dataset.ctype, e.target.dataset.cid, e.target.dataset.cfield, e.target.value);
     }));
+    $$('[data-cfield]').forEach(inp => inp.addEventListener('change', e => {
+      if (e.target.tagName === 'SELECT'){
+        updateCard(e.target.dataset.ctype, e.target.dataset.cid, e.target.dataset.cfield, e.target.value);
+      }
+    }));
     $$('[data-cprotag]').forEach(chk => chk.addEventListener('change', e => {
       updateCard('char', e.target.dataset.cprotag, 'isProtagonist', e.target.checked);
       render();
@@ -3290,6 +3621,7 @@
     bind('#btnSend','click', sendAction);
     bind('#btnContinue','click', continueStory);
     bind('#btnRetry','click', () => retryLast());
+    bind('#btnExtractUpdates','click', extractUpdatesFromLastTurn);
     bind('#btnUndo','click', undoLast);
     bind('#btnRedo','click', redoLast);
     bind('#btnErase','click', eraseLast);
@@ -3305,6 +3637,13 @@
       const [turnId, dir] = b.dataset.altnav.split(':');
       cycleAlt(turnId, parseInt(dir));
     });
+
+    // Botões do painel de atualizações
+    $$('[data-updapply]').forEach(b => b.onclick = () => applyPendingUpdate(b.dataset.updapply));
+    $$('[data-upddiscard]').forEach(b => b.onclick = () => discardPendingUpdate(b.dataset.upddiscard));
+    bind('#btnApplyAllUpdates','click', applyAllPendingUpdates);
+    bind('#btnDiscardAllUpdates','click', discardAllPendingUpdates);
+    bind('#btnDiscardAllUpdates2','click', discardAllPendingUpdates);
 
     $$('.spine .tab').forEach(t => t.onclick = () => rewindTo(t.dataset.jump));
     $$('[data-turntap]').forEach(el => el.addEventListener('click', (e) => {
@@ -3467,12 +3806,13 @@
     try{
       const testMessages = [
         {role:'system', content:'Você é um narrador de RPG. Responda em uma única frase.'},
-        {role:'user', content:'Teste de conexão. Narre em uma frase: "eu abro a porta".'}
+        {role:'user', content:'Teste. Narre em uma frase: "eu abro a porta".'}
       ];
       const conn = activeConnector();
-      if (conn.mode === 'horde') await callAiHorde(testMessages, {maxTokens: 40, temperature: 0.5});
-      else if (conn.mode === 'builtin') await callBuiltinClaude(testMessages, {maxTokens: 40, temperature: 0.5});
-      else await callOpenAICompatible(testMessages, {maxTokens: 40, temperature: 0.5});
+      const opts = {maxTokens: 60, temperature: 0.5};
+      if (conn.mode === 'horde') await callAiHorde(testMessages, opts);
+      else if (conn.mode === 'builtin') await callBuiltinClaude(testMessages, opts);
+      else await callOpenAICompatible(testMessages, opts);
       state.ui.debugTestError = null;
     }catch(err){
       state.ui.debugTestError = err.message || String(err);

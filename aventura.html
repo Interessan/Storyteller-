@@ -204,7 +204,6 @@
   .pending-summary textarea:focus{ outline:none; border-color:rgba(255,255,255,0.3); }
   .pending-actions{ display:flex; gap:6px; margin-top:8px; }
 
-  /* ====== PAINEL DE ATUALIZAÇÕES ====== */
   .updates-panel{
     max-width:740px; margin:0 auto 10px;
     background: rgba(239,236,228,0.06);
@@ -862,7 +861,7 @@
       vectorIndexing: 0,
       vectorDriveStatus: '',
       debugVector: { open: false, query: '', results: null, loading: false, error: null },
-      pendingUpdates: null   // {items: [{id, cardId, cardName, field, fieldLabel, oldValue, value, hasOld}]}
+      pendingUpdates: null
     }
   };
 
@@ -1479,7 +1478,6 @@
       if (typeof c.keywords !== 'string') c.keywords = '';
       if (typeof c.narrativeVoice !== 'string') c.narrativeVoice = '';
       if (typeof c.voiceExample !== 'string') c.voiceExample = '';
-      // campos voláteis de auto-evolução
       if (typeof c.relationship !== 'string') c.relationship = '';
       if (typeof c.wants !== 'string') c.wants = '';
       if (typeof c.status !== 'string') c.status = 'vivo';
@@ -1698,7 +1696,6 @@
     return 'TRECHOS RELEVANTES DA HISTÓRIA (recuperados por similaridade com a ação atual — use como contexto vivo, NÃO repita literalmente nem mencione que "lembrou"):\n' + lines.join('\n\n');
   }
 
-  // Constrói o bloco de instruções pro modelo devolver as atualizações de estado
   function buildUpdatesInstruction(characters){
     if (!characters || !characters.length) return '';
     const codes = characters.map((c, i) => {
@@ -1713,7 +1710,7 @@
       '[CÓDIGO] campo: novo valor',
       '',
       'Campos válidos (só use estes):',
-      '- relationship: como o personagem se sente em relação à protagonista agora (frase curta, ex: "me protegeu no tiroteio, mais confiança")',
+      '- relationship: como o personagem se sente em relação à protagonista agora (frase curta)',
       '- knows: o que ele sabe até agora (lista completa atualizada, substitui o valor anterior)',
       '- wants: o que ele quer agora / objetivo atual (frase curta)',
       '- status: um dos valores exatos: vivo | morto | desaparecido | desconhecido',
@@ -1731,7 +1728,6 @@
     ].join('\n');
   }
 
-  // Cria o mapa {code: cardId} que será usado pra interpretar a resposta
   function buildCardCodeMap(characters){
     const map = {};
     (characters || []).forEach((c, i) => {
@@ -1741,7 +1737,6 @@
     return map;
   }
 
-  // Extrai o bloco ===UPDATES=== do texto e retorna {cleaned, updates}
   function extractUpdatesFromText(text, codeMap){
     if (!text) return { cleaned: text || '', updates: [] };
     const re = /===UPDATES===([\s\S]*?)===END\s*UPDATES===/i;
@@ -1753,7 +1748,6 @@
     if (raw){
       const lines = raw.split('\n');
       lines.forEach(line => {
-        // formato: [c001] campo: valor
         const m = line.match(/^\s*\[([A-Za-z0-9]+)\]\s*([a-zA-Z_]+)\s*:\s*(.+?)\s*$/);
         if (!m) return;
         const code = m[1];
@@ -1906,8 +1900,7 @@
       try{ const parsed = JSON.parse(t); waitSecs = (parsed.error && parsed.error.metadata && parsed.error.metadata.retry_after_seconds) || 4; }catch(e){}
       const retryHeader = res.headers.get('Retry-After');
       if (retryHeader) waitSecs = parseInt(retryHeader) || waitSecs;
-      updateStatus('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's…', false);
-      render();
+      updateStatusOnly('Modelo com muita gente usando agora — tentando de novo em ' + waitSecs + 's…', false);
       await new Promise(r => setTimeout(r, waitSecs * 1000));
       return callOpenAICompatible(messages, opts, attempt + 1);
     }
@@ -1975,7 +1968,7 @@
     const started = Date.now();
     while (Date.now() - started < 180000){
       await new Promise(r => setTimeout(r, 3000));
-      updateStatus('Na fila do AI Horde… isso pode levar um tempinho.', false);
+      updateStatusOnly('Na fila do AI Horde… isso pode levar um tempinho.', false);
       const statusRes = await fetch('https://aihorde.net/api/v2/generate/text/status/' + jobId);
       if (!statusRes.ok) continue;
       const statusData = await statusRes.json();
@@ -2028,9 +2021,7 @@
     else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
     else result = await callOpenAICompatible(messages);
     const rawBeforeClean = result.text;
-    // 1) extrai o bloco de updates do texto cru
     const {cleaned, updates} = extractUpdatesFromText(rawBeforeClean, codeMap);
-    // 2) aplica limpeza padrão no texto sem os updates
     result.text = cleanNarrationText(cleaned, result.cutOff);
     result.ragUsed = ragUsed || 0;
     result.updates = updates;
@@ -2062,7 +2053,6 @@
     t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ');
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
-    // remove qualquer resquício do bloco de updates que tenha ficado
     t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
@@ -2107,6 +2097,17 @@
   function updateStatus(msg, isErr){
     state.ui.statusMsg = msg; state.ui.statusErr = !!isErr; render();
   }
+  function updateStatusOnly(msg, isErr){
+    state.ui.statusMsg = msg;
+    state.ui.statusErr = !!isErr;
+    const el = document.querySelector('.status');
+    if (el){
+      el.textContent = msg;
+      el.classList.toggle('err', !!isErr);
+    } else {
+      render();
+    }
+  }
 
   function pushUndo(label){
     if (!state.ui.undoStack) state.ui.undoStack = [];
@@ -2139,8 +2140,6 @@
     syncStoryVectors().catch(() => {});
   }
 
-  // ================ AUTO-EVOLUÇÃO: painel de atualizações ================
-
   const UPDATE_FIELD_LABELS = {
     relationship: 'Relação',
     knows: 'Sabe agora',
@@ -2158,7 +2157,7 @@
       const card = (s.memory.characters || []).find(c => c.id === u.cardId);
       if (!card) return;
       const key = u.cardId + '|' + u.field;
-      if (existingCardIds.has(key)) return; // já tem sugestão pra esse campo
+      if (existingCardIds.has(key)) return;
       existingCardIds.add(key);
       let oldValue = '';
       if (u.field === 'status') oldValue = card.status || 'vivo';
@@ -2183,17 +2182,14 @@
     const s = state.story;
     const card = (s.memory.characters || []).find(c => c.id === item.cardId);
     if (!card){
-      // cartão foi apagado — remove
       pu.items = pu.items.filter(it => it.id !== itemId);
       if (!pu.items.length) state.ui.pendingUpdates = null;
       render();
       return;
     }
-    // pega o valor atual do input (se existir)
     const input = document.querySelector('[data-updval="' + itemId + '"]');
     const newValue = input ? input.value.trim() : item.value;
     if (!newValue){
-      // valor vazio: trata como descartar
       pu.items = pu.items.filter(it => it.id !== itemId);
       if (!pu.items.length) state.ui.pendingUpdates = null;
       render();
@@ -2236,7 +2232,6 @@
     render();
   }
 
-  // Segunda passada: pede ao modelo pra extrair updates do último turno
   async function extractUpdatesFromLastTurn(){
     if (state.ui.generating) return;
     const t = lastAiTurn();
@@ -2257,7 +2252,7 @@
       const updatesInstruction = buildUpdatesInstruction(s.memory.characters);
       const sys = [
         'Você é um assistente que analisa uma narração de RPG já escrita e identifica mudanças de estado dos personagens que aconteceram NAQUELA cena.',
-        'Responda APENAS com o bloco ===UPDATES=== conforme as regras abaixo. Se nada mudou, deixe o bloco vazio (só as duas linhas de marcador).',
+        'Responda APENAS com o bloco ===UPDATES=== conforme as regras abaixo. Se nada mudou, deixe o bloco vazio.',
         '',
         'REGRAS:',
         '- Só inclua mudanças REAIS que aconteceram na cena narrada.',
@@ -2291,8 +2286,6 @@
     render();
   }
 
-  // ========================================================================
-
   async function sendAction(){
     const raw = state.ui.composerText;
     const text = raw.trim();
@@ -2311,7 +2304,6 @@
       const result = await generate(text);
       const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0};
       s.turns.push(aiTurn);
-      // registra atualizações sugeridas
       if (result.updates && result.updates.length){
         addPendingUpdates(result.updates);
       }
@@ -2606,7 +2598,6 @@
     if (state.ui.expandedCard && state.ui.expandedCard.id === id){
       state.ui.expandedCard = null;
     }
-    // remove sugestões de update pendentes desse card
     if (state.ui.pendingUpdates){
       state.ui.pendingUpdates.items = state.ui.pendingUpdates.items.filter(it => it.cardId !== id);
       if (!state.ui.pendingUpdates.items.length) state.ui.pendingUpdates = null;
@@ -2857,6 +2848,7 @@
     const app = document.getElementById('app');
     const s = state.story;
     const prevFeed = document.querySelector('.feed');
+    const wasAtBottom = prevFeed ? (prevFeed.scrollHeight - prevFeed.scrollTop - prevFeed.clientHeight < 60) : true;
     const savedFeedScroll = prevFeed ? prevFeed.scrollTop : null;
     const prevMem = document.querySelector('.memory-panel');
     const savedMemScroll = prevMem ? prevMem.scrollTop : null;
@@ -2900,7 +2892,7 @@
         </div>
         <div class="btns">
           <span id="saveWarning" class="save-warning" style="display:${state.ui.saveWarning ? 'inline' : 'none'};">⚠ não salvou</span>
-          <button class="icon" id="btnMemory" title="Memória, personagens, locais...">📖</button>
+          <button class="icon" id="btnMemory" title="Memória">📖</button>
           <button class="icon" id="btnStories" title="Minhas histórias">📚</button>
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
           <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout">${state.ui.forcedLayout === 'mobile' ? '📱' : state.ui.forcedLayout === 'desktop' ? '🖥️' : '🔄'}</button>
@@ -2915,8 +2907,8 @@
             <button class="mem-tab ${memTab === 'memory' ? 'active' : ''}" data-memtab="memory" title="Memória">📖</button>
             <button class="mem-tab ${memTab === 'chars' ? 'active' : ''}" data-memtab="chars" title="Personagens">🎭</button>
             <button class="mem-tab ${memTab === 'locs' ? 'active' : ''}" data-memtab="locs" title="Locais">🗺️</button>
-            <button class="mem-tab ${memTab === 'groups' ? 'active' : ''}" data-memtab="groups" title="Grupos / famílias">👥</button>
-            <button class="mem-tab ${memTab === 'secrets' ? 'active' : ''}" data-memtab="secrets" title="Segredos do mundo">🔒</button>
+            <button class="mem-tab ${memTab === 'groups' ? 'active' : ''}" data-memtab="groups" title="Grupos">👥</button>
+            <button class="mem-tab ${memTab === 'secrets' ? 'active' : ''}" data-memtab="secrets" title="Segredos">🔒</button>
           </div>
           ${memTab === 'memory' ? renderMemoryTabContent() : ''}
           ${memTab === 'chars' ? renderCharsTabContent() : ''}
@@ -2988,7 +2980,10 @@
 
     bindEvents();
 
-    if (savedFeedScroll !== null){
+    if (wasAtBottom){
+      const feed = document.querySelector('.feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    } else if (savedFeedScroll !== null){
       const feed = document.querySelector('.feed');
       if (feed) feed.scrollTop = savedFeedScroll;
     }
@@ -3408,7 +3403,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview</strong> — auto-evolução de fichas
+          Versão: <strong>1.0-preview (v41)</strong> — correção do loop de render
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3638,7 +3633,6 @@
       cycleAlt(turnId, parseInt(dir));
     });
 
-    // Botões do painel de atualizações
     $$('[data-updapply]').forEach(b => b.onclick = () => applyPendingUpdate(b.dataset.updapply));
     $$('[data-upddiscard]').forEach(b => b.onclick = () => discardPendingUpdate(b.dataset.upddiscard));
     bind('#btnApplyAllUpdates','click', applyAllPendingUpdates);

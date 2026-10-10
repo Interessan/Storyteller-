@@ -1119,14 +1119,24 @@
           const all = req.result || [];
           const filtered = all.filter(item => !storyId || item.storyId === storyId);
           const scored = filtered
-            .map(item => ({
-              turnId: item.turnId,
-              type: item.type,
-              text: item.text,
-              archived: !!item.archived,
-              score: cosineSimilarity(queryVector, item.vector)
-            }))
-            .filter(item => item.score > threshold)
+            .map(item => {
+              let text = item.text;
+              // fallback: se o texto não veio (vetor baixado do Drive em versão
+              // antiga, que não incluía o campo `text`), reconstrói a partir
+              // do turno local pelo turnId
+              if (!text && state.story){
+                const t = state.story.turns.find(x => x.id === item.turnId);
+                if (t) text = t.text;
+              }
+              return {
+                turnId: item.turnId,
+                type: item.type,
+                text: text || '',
+                archived: !!item.archived,
+                score: cosineSimilarity(queryVector, item.vector)
+              };
+            })
+            .filter(item => item.score > threshold && item.text)
             .sort((a, b) => b.score - a.score)
             .slice(0, topK);
           resolve(scored);
@@ -1237,6 +1247,7 @@
           t: it.type,
           h: it.hash || textHash(it.text || ''),
           a: !!it.archived,
+          text: (it.text || '').slice(0, 2500),
           v: encodeVector(it.vector)
         }))
       };
@@ -1332,7 +1343,7 @@
             type: v.t,
             hash: v.h,
             archived: !!v.a,
-            text: '',
+            text: v.text || '',
             vector: decodeVector(v.v),
             updatedAt: Date.now()
           });
@@ -3403,7 +3414,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v41)</strong> — correção do loop de render
+          Versão: <strong>1.0-preview (v42)</strong> — vetores do Drive com texto
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3417,12 +3428,12 @@
         ${c.mode === 'horde' ? `
           <div class="field"><label>Chave do AI Horde</label><input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo"></div>
           <div class="field"><label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir NSFW</label></div>
-          <div class="field"><label>Modelos preferidos (separados por vírgula)</label><input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: aphrodite/TheDrummer/Skyfall-31B-v4.2"></div>
+          <div class="field"><label>Modelos preferidos (separados por vírgula)</label><input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: MythoMax-L2-13B, Fimbulvetr-11B-v2"></div>
         ` : ''}
         ${c.mode === 'openai' ? `
-          <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}"></div>
-          <div class="field"><label>Chave</label><input type="text" id="oaKey" value="${esc(c.oaKey)}"></div>
-          <div class="field"><label>Modelo</label><input type="text" id="oaModel" value="${esc(c.oaModel)}"></div>
+          <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://..."></div>
+          <div class="field"><label>Chave</label><input type="text" id="oaKey" value="${esc(c.oaKey)}" placeholder="sk-..."></div>
+          <div class="field"><label>Modelo</label><input type="text" id="oaModel" value="${esc(c.oaModel)}" placeholder="ex: modelo-aqui"></div>
         ` : ''}
 
         <div class="divider"></div>

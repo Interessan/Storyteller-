@@ -875,6 +875,7 @@
       oaKey: '',
       oaModel: '',
       maxLength: 250,
+      updatesTokenBudget: 80,
       temperature: 0.85,
       historyTokenBudget: 3000,
       maxHistoryTurns: 40,
@@ -1434,11 +1435,15 @@
   async function init(){
     state.index = (await sGet('stories:index')) || [];
     state.connector = Object.assign(defaultConnector(), (await sGet('settings:connector')) || {});
+    // Migração: campo updatesTokenBudget introduzido na v46
+    if (typeof state.connector.updatesTokenBudget !== 'number'){
+      state.connector.updatesTokenBudget = 80;
+    }
     // Migração: Claude embutido foi removido. Quem tinha 'builtin' salvo volta pro Horde.
     if (state.connector.mode === 'builtin'){
       state.connector.mode = 'horde';
-      await sSet('settings:connector', state.connector);
     }
+    await sSet('settings:connector', state.connector);
     const lastId = await sGet('settings:lastOpen');
     if (lastId && state.index.find(s => s.id === lastId)){
       await loadStory(lastId);
@@ -1871,7 +1876,7 @@
       voiceBlock,
       formatLine,
       'Continue a história de forma coerente com tudo que já aconteceu. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora".',
-      'TAMANHO DA RESPOSTA: escreva no máximo cerca de ' + (conn.maxLength || 250) + ' tokens (bem curto, poucas frases). É OBRIGATÓRIO terminar em uma frase completa.',
+      'TAMANHO DA RESPOSTA: a narração deve ter no máximo ~' + (conn.maxLength || 250) + ' tokens (aproximadamente ' + Math.max(3, Math.round((conn.maxLength || 250) * 0.7)) + ' palavras). É um limite FIRME — não ultrapasse. Se for pequeno, escreva UMA frase curta. Termine sempre numa frase completa.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       buildVectorMemoryBlock(relevantMemories),
@@ -1919,6 +1924,15 @@
     };
   }
 
+  // Calcula o max_tokens real enviado ao modelo: narração + reserva pro bloco de updates.
+  // Fonte única de verdade, usada pelo Horde e pelo OpenAI-compatible.
+  function computeGenLength(c, opts){
+    if (opts && typeof opts.maxTokens === 'number') return opts.maxTokens;
+    const base = c.maxLength || 250;
+    const reserve = (typeof c.updatesTokenBudget === 'number') ? c.updatesTokenBudget : 80;
+    return Math.max(1, base + reserve);
+  }
+
   function stripEcho(promptTail, text){
     if (!text) return text;
     let t = text.trim();
@@ -1935,7 +1949,7 @@
     if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
     if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações.');
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const maxTokens = opts.maxTokens || ((c.maxLength || 250) + 80);
+    const maxTokens = computeGenLength(c, opts);
     const headers = {'Content-Type':'application/json'};
     if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
     const reqBody = { model: c.oaModel, messages, max_tokens: maxTokens, temperature };
@@ -1982,7 +1996,7 @@
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const genLength = opts.maxTokens || ((c.maxLength || 250) + 80);
+    const genLength = computeGenLength(c, opts);
     const estimatedPromptTokens = Math.ceil(promptText.length / 3.2);
     const maxContextLength = Math.min(16384, Math.max(2048, estimatedPromptTokens + genLength + 512));
 
@@ -3470,13 +3484,17 @@
     const lastPush = syncMeta && syncMeta.lastPushedAt ? new Date(syncMeta.lastPushedAt).toLocaleString('pt-BR') : 'nunca';
     const lastPull = syncMeta && syncMeta.lastPulledAt ? new Date(syncMeta.lastPulledAt).toLocaleString('pt-BR') : 'nunca';
 
+    const updReserve = (typeof c.updatesTokenBudget === 'number') ? c.updatesTokenBudget : 80;
+    const totalSent = (c.maxLength || 250) + updReserve;
+    const wordsApprox = Math.max(3, Math.round((c.maxLength || 250) * 0.7));
+
     return `
     <div class="modal-overlay" id="overlaySettings">
       <div class="modal">
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v45)</strong> — snapshot de memória no undo/rewind + remoção do Claude embutido
+          Versão: <strong>1.0-preview (v46)</strong> — controle separado de tokens (narração + updates)
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3498,15 +3516,29 @@
         ` : ''}
 
         <div class="divider"></div>
+        <div class="field">
+          <label>Máx. tokens da narração</label>
+          <input type="text" id="maxLength" value="${c.maxLength}">
+          <div class="summ-note" style="font-size:11px; margin-top:5px;">
+            ≈ ${wordsApprox} palavras. É só a história, sem os updates.
+          </div>
+        </div>
+        <div class="field">
+          <label>Reserva para updates de ficha</label>
+          <input type="text" id="updatesTokenBudget" value="${updReserve}">
+          <div class="summ-note" style="font-size:11px; margin-top:5px;">
+            Espaço extra pro bloco ===UPDATES=== no fim da resposta. Se a narração estourar, os updates são cortados.<br>
+            <strong>Total enviado ao modelo: ${totalSent} tokens.</strong>
+          </div>
+        </div>
         <div class="row2">
-          <div class="field"><label>Máx. tokens da resposta</label><input type="text" id="maxLength" value="${c.maxLength}"></div>
           <div class="field"><label>Temperatura</label><input type="text" id="temperature" value="${c.temperature}"></div>
+          <div class="field"><label>Orçamento do histórico</label><input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}"></div>
         </div>
         <div class="row2">
-          <div class="field"><label>Orçamento do histórico</label><input type="text" id="historyTokenBudget" value="${c.historyTokenBudget}"></div>
           <div class="field"><label>Teto de falas</label><input type="text" id="maxHistoryTurns" value="${c.maxHistoryTurns}"></div>
+          <div class="field"><label>Orçamento do bloco de fichas</label><input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}"></div>
         </div>
-        <div class="field"><label>Orçamento do bloco de fichas</label><input type="text" id="cardsTokenBudget" value="${c.cardsTokenBudget}"></div>
         <div class="field"><label><input type="checkbox" id="debugMode" ${c.debugMode?'checked':''}> Modo de depuração</label></div>
         ${c.debugMode ? renderApiDebugPanel() : ''}
 
@@ -3746,6 +3778,8 @@
         c.oaModel = g('oaModel') || '';
       }
       c.maxLength = parseInt(g('maxLength')) || 250;
+      const updVal = g('updatesTokenBudget');
+      c.updatesTokenBudget = (updVal !== undefined) ? Math.max(0, parseInt(updVal) || 0) : 80;
       c.temperature = parseFloat(g('temperature')) || 0.85;
       c.historyTokenBudget = parseInt(g('historyTokenBudget')) || 3000;
       c.maxHistoryTurns = parseInt(g('maxHistoryTurns')) || 40;

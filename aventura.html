@@ -1434,6 +1434,11 @@
   async function init(){
     state.index = (await sGet('stories:index')) || [];
     state.connector = Object.assign(defaultConnector(), (await sGet('settings:connector')) || {});
+    // Migração: Claude embutido foi removido. Quem tinha 'builtin' salvo volta pro Horde.
+    if (state.connector.mode === 'builtin'){
+      state.connector.mode = 'horde';
+      await sSet('settings:connector', state.connector);
+    }
     const lastId = await sGet('settings:lastOpen');
     if (lastId && state.index.find(s => s.id === lastId)){
       await loadStory(lastId);
@@ -1541,6 +1546,14 @@
   function scheduleSave(){
     if (!state.story) return;
     state.story.updatedAt = Date.now();
+    // Snapshot de memória: sempre que a memória muda, o último turno guarda uma cópia.
+    // Isso garante que rewinds futuros restaurem as fichas corretamente.
+    if (state.story.turns.length){
+      const last = state.story.turns[state.story.turns.length - 1];
+      try{
+        last.memorySnapshot = JSON.parse(JSON.stringify(state.story.memory));
+      }catch(e){ /* silencioso */ }
+    }
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       const ok = await sSet('story:' + state.story.id, state.story);
@@ -1745,9 +1758,6 @@
     return map;
   }
 
-  // Extrai updates do texto bruto. Primeiro tenta com os marcadores ===UPDATES===,
-  // e se não achar, faz um fallback procurando linhas no formato [cXXX] campo: valor
-  // (alguns modelos esquecem os marcadores mas mantêm o formato interno).
   function extractUpdatesFromText(text, codeMap){
     if (!text) return { cleaned: text || '', updates: [] };
     let cleaned = text;
@@ -1759,7 +1769,6 @@
       rawBlock = (markerMatch[1] || '').trim();
       cleaned = (cleaned.slice(0, markerMatch.index) + cleaned.slice(markerMatch.index + markerMatch[0].length)).trim();
     } else {
-      // fallback: procura linhas órfãs no formato [cXXX] campo: valor
       const orphanLineRe = /^\s*\[([A-Za-z]\d{1,4})\]\s*([a-zA-Z_]+)\s*:\s*(.*?)\s*$/;
       const lines = cleaned.split('\n');
       const keptLines = [];
@@ -1785,7 +1794,7 @@
       lines.forEach(line => {
         const m = line.match(/^\s*\[([A-Za-z0-9]+)\]\s*([a-zA-Z_]+)\s*:\s*(.+?)\s*$/);
         if (!m) return;
-        const code = m[1].toLowerCase(); // normaliza maiúsculas/minúsculas
+        const code = m[1].toLowerCase();
         const field = m[2].toLowerCase();
         const value = m[3].trim();
         if (!codeMap || !codeMap[code]) return;
@@ -1795,13 +1804,9 @@
       });
     }
 
-    // limpeza final de segurança: remove qualquer linha órfã que ainda tenha sobrado
-    // (por exemplo, uma linha truncada que não bateu com a regex)
     cleaned = cleaned.split('\n').filter(l => {
       const lt = l.trim();
-      // linha órfã de update com campo conhecido
       if (/^\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:/i.test(lt)) return false;
-      // linha órfã que é só um código solto tipo [c002]
       if (/^\[[A-Za-z]\d{1,4}\]\s*$/.test(lt)) return false;
       return true;
     }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -2031,41 +2036,11 @@
     throw new Error('Tempo esgotado esperando o AI Horde.');
   }
 
-  async function callBuiltinClaude(messages, opts){
-    opts = opts || {};
-    const sys = messages.find(m => m.role === 'system');
-    const rest = messages.filter(m => m.role !== 'system').map(m => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content
-    }));
-    const reqBody = { model: 'claude-sonnet-4-6', max_tokens: opts.maxTokens || 1200, system: sys ? sys.content : undefined, messages: rest };
-    let res, data;
-    try{
-      res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(reqBody)
-      });
-    }catch(err){
-      recordDebug('builtin', reqBody, null, err.message);
-      throw new Error('Falha de rede ao contatar a API embutida.');
-    }
-    if (!res.ok){
-      const t = await res.text().catch(()=> '');
-      recordDebug('builtin', reqBody, t);
-      throw new Error('API embutida respondeu ' + res.status);
-    }
-    data = await res.json();
-    recordDebug('builtin', reqBody, data);
-    const textBlock = (data.content || []).find(b => b.type === 'text');
-    if (!textBlock) throw new Error('Resposta veio sem texto.');
-    return { text: textBlock.text.trim(), meta: null };
-  }
-
   async function generate(actionText, opts){
     const {messages, ragUsed, codeMap} = await buildPromptMessages(actionText, opts);
     const conn = activeConnector();
     let result;
     if (conn.mode === 'horde') result = await callAiHorde(messages);
-    else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages);
     else result = await callOpenAICompatible(messages);
     const rawBeforeClean = result.text;
     const {cleaned, updates} = extractUpdatesFromText(rawBeforeClean, codeMap);
@@ -2101,9 +2076,7 @@
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
     t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
-    // remove qualquer linha órfã de update que tenha escapado ([cXXX] campo: valor)
     t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:.*$/gim, '');
-    // remove linha que é só um código solto tipo [c002]
     t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*$/gim, '');
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
@@ -2160,9 +2133,38 @@
     }
   }
 
+  // ========================================================================
+  // SNAPSHOT DE MEMÓRIA (undo/redo/rewind restauram fichas + memória)
+  // ========================================================================
+  function snapshotMemoryDeep(){
+    try{ return JSON.parse(JSON.stringify(state.story.memory)); }
+    catch(e){ return null; }
+  }
+
+  function countMemoryDifferences(a, b){
+    if (!a || !b) return 0;
+    let count = 0;
+    const aChars = a.characters || [];
+    const bChars = b.characters || [];
+    const bById = {};
+    bChars.forEach(c => { bById[c.id] = c; });
+    aChars.forEach(c => {
+      const old = bById[c.id];
+      if (!old) return;
+      try{
+        if (JSON.stringify(c) !== JSON.stringify(old)) count++;
+      }catch(e){ /* ignora */ }
+    });
+    return count;
+  }
+
   function pushUndo(label){
     if (!state.ui.undoStack) state.ui.undoStack = [];
-    state.ui.undoStack.push({ label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    state.ui.undoStack.push({
+      label,
+      turns: JSON.parse(JSON.stringify(state.story.turns)),
+      memory: snapshotMemoryDeep()
+    });
     if (state.ui.undoStack.length > 20) state.ui.undoStack.shift();
     state.ui.redoStack = [];
   }
@@ -2170,9 +2172,14 @@
     const stack = state.ui.undoStack;
     if (!stack || !stack.length) return;
     if (!state.ui.redoStack) state.ui.redoStack = [];
-    state.ui.redoStack.push({ label: stack[stack.length-1].label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    state.ui.redoStack.push({
+      label: stack[stack.length-1].label,
+      turns: JSON.parse(JSON.stringify(state.story.turns)),
+      memory: snapshotMemoryDeep()
+    });
     const prev = stack.pop();
     state.story.turns = prev.turns;
+    if (prev.memory) state.story.memory = prev.memory;
     scheduleSave();
     updateStatus('Desfeito: ' + prev.label, false);
     render();
@@ -2182,9 +2189,14 @@
     const stack = state.ui.redoStack;
     if (!stack || !stack.length) return;
     if (!state.ui.undoStack) state.ui.undoStack = [];
-    state.ui.undoStack.push({ label: stack[stack.length-1].label, turns: JSON.parse(JSON.stringify(state.story.turns)) });
+    state.ui.undoStack.push({
+      label: stack[stack.length-1].label,
+      turns: JSON.parse(JSON.stringify(state.story.turns)),
+      memory: snapshotMemoryDeep()
+    });
     const next = stack.pop();
     state.story.turns = next.turns;
+    if (next.memory) state.story.memory = next.memory;
     scheduleSave();
     updateStatus('Refeito: ' + next.label, false);
     render();
@@ -2321,7 +2333,6 @@
       let result;
       const opts = {maxTokens: 400, temperature: 0.2};
       if (conn.mode === 'horde') result = await callAiHorde(messages, opts);
-      else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages, opts);
       else result = await callOpenAICompatible(messages, opts);
       const {updates} = extractUpdatesFromText(result.text, codeMap);
       if (updates.length){
@@ -2342,7 +2353,7 @@
     const text = raw.trim();
     if (!text || state.ui.generating) return;
     const s = state.story;
-    const userTurn = {id: uid(), type:'user', text: raw};
+    const userTurn = {id: uid(), type:'user', text: raw, memorySnapshot: snapshotMemoryDeep()};
     s.turns.push(userTurn);
     state.ui.composerText = '';
     state.ui.generating = true;
@@ -2353,7 +2364,7 @@
     }
     try{
       const result = await generate(text);
-      const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0};
+      const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction: text, alts: [result.text], altIndex: 0, memorySnapshot: snapshotMemoryDeep()};
       s.turns.push(aiTurn);
       if (result.updates && result.updates.length){
         addPendingUpdates(result.updates);
@@ -2388,7 +2399,7 @@
     render();
     try{
       const result = await generate('', {isContinue:true});
-      const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0};
+      const aiTurn = {id: uid(), type:'ai', text: result.text, sourceAction:'', isContinue:true, alts:[result.text], altIndex:0, memorySnapshot: snapshotMemoryDeep()};
       s.turns.push(aiTurn);
       if (result.updates && result.updates.length){
         addPendingUpdates(result.updates);
@@ -2487,11 +2498,23 @@
     const idx = s.turns.findIndex(t => t.id === turnId);
     if (idx === -1) return;
     pushUndo('voltar no tempo');
+    const target = s.turns[idx];
+    let memNote = '';
+    // Restaura a memória ao estado daquele turno (se o turno tiver snapshot)
+    if (target && target.memorySnapshot){
+      try{
+        const changed = countMemoryDifferences(s.memory, target.memorySnapshot);
+        s.memory = JSON.parse(JSON.stringify(target.memorySnapshot));
+        if (changed > 0){
+          memNote = ' · ' + changed + ' ficha' + (changed > 1 ? 's' : '') + ' revertida' + (changed > 1 ? 's' : '');
+        }
+      }catch(e){ /* silencioso */ }
+    }
     const removed = s.turns.slice(idx + 1);
     s.turns = s.turns.slice(0, idx + 1);
     state.ui.openActionsFor = null;
     scheduleSave();
-    updateStatus('Voltou pro ponto #' + (idx + 1) + '.', false);
+    updateStatus('Voltou pro ponto #' + (idx + 1) + memNote, false);
     render();
     removed.forEach(t => removeTurnVector(t.id).catch(() => {}));
   }
@@ -2563,7 +2586,6 @@
       const sumOpts = {temperature: 0.3, maxTokens: 600};
       let result;
       if (conn.mode === 'horde') result = await callAiHorde(messages, sumOpts);
-      else if (conn.mode === 'builtin') result = await callBuiltinClaude(messages, sumOpts);
       else result = await callOpenAICompatible(messages, sumOpts);
 
       state.ui.pendingSummary = {
@@ -3454,14 +3476,13 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v44)</strong> — fallback de updates órfãos
+          Versão: <strong>1.0-preview (v45)</strong> — snapshot de memória no undo/rewind + remoção do Claude embutido
         </div>
         <div class="field">
           <label>Provedor</label>
           <select id="connMode">
             <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, aceita NSFW)</option>
             <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI</option>
-            <option value="builtin" ${c.mode==='builtin'?'selected':''}>Claude embutido (sem NSFW)</option>
           </select>
         </div>
 
@@ -3856,7 +3877,6 @@
       const conn = activeConnector();
       const opts = {maxTokens: 60, temperature: 0.5};
       if (conn.mode === 'horde') await callAiHorde(testMessages, opts);
-      else if (conn.mode === 'builtin') await callBuiltinClaude(testMessages, opts);
       else await callOpenAICompatible(testMessages, opts);
       state.ui.debugTestError = null;
     }catch(err){

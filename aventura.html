@@ -1745,20 +1745,47 @@
     return map;
   }
 
+  // Extrai updates do texto bruto. Primeiro tenta com os marcadores ===UPDATES===,
+  // e se não achar, faz um fallback procurando linhas no formato [cXXX] campo: valor
+  // (alguns modelos esquecem os marcadores mas mantêm o formato interno).
   function extractUpdatesFromText(text, codeMap){
     if (!text) return { cleaned: text || '', updates: [] };
-    const re = /===UPDATES===([\s\S]*?)===END\s*UPDATES===/i;
-    const match = text.match(re);
-    if (!match) return { cleaned: text, updates: [] };
-    const cleaned = (text.slice(0, match.index) + text.slice(match.index + match[0].length)).trim();
-    const raw = (match[1] || '').trim();
+    let cleaned = text;
+    let rawBlock = '';
+
+    const markerRe = /===UPDATES===([\s\S]*?)===END\s*UPDATES===/i;
+    const markerMatch = cleaned.match(markerRe);
+    if (markerMatch){
+      rawBlock = (markerMatch[1] || '').trim();
+      cleaned = (cleaned.slice(0, markerMatch.index) + cleaned.slice(markerMatch.index + markerMatch[0].length)).trim();
+    } else {
+      // fallback: procura linhas órfãs no formato [cXXX] campo: valor
+      const orphanLineRe = /^\s*\[([A-Za-z]\d{1,4})\]\s*([a-zA-Z_]+)\s*:\s*(.*?)\s*$/;
+      const lines = cleaned.split('\n');
+      const keptLines = [];
+      const orphanLines = [];
+      let orphanCount = 0;
+      lines.forEach(line => {
+        if (orphanLineRe.test(line.trim())){
+          orphanCount++;
+          orphanLines.push(line.trim());
+        } else {
+          keptLines.push(line);
+        }
+      });
+      if (orphanCount > 0){
+        rawBlock = orphanLines.join('\n');
+        cleaned = keptLines.join('\n').trim();
+      }
+    }
+
     const updates = [];
-    if (raw){
-      const lines = raw.split('\n');
+    if (rawBlock){
+      const lines = rawBlock.split('\n');
       lines.forEach(line => {
         const m = line.match(/^\s*\[([A-Za-z0-9]+)\]\s*([a-zA-Z_]+)\s*:\s*(.+?)\s*$/);
         if (!m) return;
-        const code = m[1];
+        const code = m[1].toLowerCase(); // normaliza maiúsculas/minúsculas
         const field = m[2].toLowerCase();
         const value = m[3].trim();
         if (!codeMap || !codeMap[code]) return;
@@ -1767,6 +1794,18 @@
         updates.push({ cardId: codeMap[code], field, value });
       });
     }
+
+    // limpeza final de segurança: remove qualquer linha órfã que ainda tenha sobrado
+    // (por exemplo, uma linha truncada que não bateu com a regex)
+    cleaned = cleaned.split('\n').filter(l => {
+      const lt = l.trim();
+      // linha órfã de update com campo conhecido
+      if (/^\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:/i.test(lt)) return false;
+      // linha órfã que é só um código solto tipo [c002]
+      if (/^\[[A-Za-z]\d{1,4}\]\s*$/.test(lt)) return false;
+      return true;
+    }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
     return { cleaned, updates };
   }
 
@@ -2062,6 +2101,10 @@
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
     t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
+    // remove qualquer linha órfã de update que tenha escapado ([cXXX] campo: valor)
+    t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:.*$/gim, '');
+    // remove linha que é só um código solto tipo [c002]
+    t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*$/gim, '');
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -3411,7 +3454,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v43)</strong> — buffer de updates ajustado
+          Versão: <strong>1.0-preview (v44)</strong> — fallback de updates órfãos
         </div>
         <div class="field">
           <label>Provedor</label>

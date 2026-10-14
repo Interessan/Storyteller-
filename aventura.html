@@ -1551,8 +1551,6 @@
   function scheduleSave(){
     if (!state.story) return;
     state.story.updatedAt = Date.now();
-    // Snapshot de memória: sempre que a memória muda, o último turno guarda uma cópia.
-    // Isso garante que rewinds futuros restaurem as fichas corretamente.
     if (state.story.turns.length){
       const last = state.story.turns[state.story.turns.length - 1];
       try{
@@ -1754,6 +1752,47 @@
     ].join('\n');
   }
 
+  // Prompt enxuto só pra extrair updates, usado na fase 2 (Horde).
+  function buildUpdatesOnlyMessages(narrationText, characters){
+    const codes = characters.map((c, i) => {
+      const code = 'c' + String(i + 1).padStart(3, '0');
+      return '[' + code + '] ' + (c.name || 'Sem nome');
+    }).join('\n');
+    const sys = [
+      'Você é um assistente que analisa uma narração de RPG já escrita e identifica mudanças de estado dos personagens que aconteceram NAQUELA cena.',
+      '',
+      'FORMATO OBRIGATÓRIO: sua resposta INTEIRA deve ser um bloco começando com a linha exata "===UPDATES===" e terminando com a linha exata "===END UPDATES===".',
+      'Se nada mudou, responda apenas as duas linhas vazias (===UPDATES=== seguido de ===END UPDATES===).',
+      'NUNCA escreva nada fora dessas duas linhas. NÃO escreva comentários, explicações, saudações nem a narração de volta.',
+      '',
+      'Cada linha entre os marcadores representa UMA mudança real de estado NA CENA. Formato:',
+      '[CÓDIGO] campo: novo valor',
+      '',
+      'Campos válidos: relationship | knows | wants | status',
+      '',
+      'REGRAS:',
+      '- Só inclua mudanças REAIS que aconteceram na cena. NÃO invente.',
+      '- Só inclua personagens que participaram ou foram diretamente afetados.',
+      '- Se um campo NÃO mudou, NÃO inclua aquela linha.',
+      '- Use APENAS os códigos abaixo, no formato [cXXX].',
+      '',
+      'Personagens disponíveis com códigos:',
+      codes
+    ].join('\n');
+    const userMsg = [
+      'NARRAÇÃO PARA ANALISAR:',
+      '',
+      narrationText,
+      '',
+      '---',
+      'Agora escreva o bloco ===UPDATES=== (ou vazio, se nada mudou). Comece a resposta exatamente com "===UPDATES===".'
+    ].join('\n');
+    return [
+      {role:'system', content: sys},
+      {role:'user', content: userMsg}
+    ];
+  }
+
   function buildCardCodeMap(characters){
     const map = {};
     (characters || []).forEach((c, i) => {
@@ -1866,7 +1905,9 @@
       '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem.'
     ].filter(Boolean).join('\n') : '';
 
-    const updatesInstruction = buildUpdatesInstruction(s.memory.characters || []);
+    // Se estamos no modo two-phase (Horde), não incluímos instruções de updates no prompt de narração.
+    const omitUpdatesInstruction = !!opts.omitUpdatesInstruction;
+    const updatesInstruction = omitUpdatesInstruction ? '' : buildUpdatesInstruction(s.memory.characters || []);
     const codeMap = buildCardCodeMap(s.memory.characters || []);
 
     const sys = [
@@ -1892,7 +1933,9 @@
       'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
-      'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa, e SÓ depois (no final absoluto) o bloco ===UPDATES===. NUNCA copie ou parafraseie instruções do prompt. Se você vir "[Lembrete: ...]", ignore.',
+      omitUpdatesInstruction
+        ? 'REGRA CRÍTICA DE SAÍDA: responda APENAS com a narração em prosa. NÃO escreva nada além da narração — sem blocos, sem marcadores, sem comentários. NUNCA copie ou parafraseie instruções do prompt.'
+        : 'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa, e SÓ depois (no final absoluto) o bloco ===UPDATES===. NUNCA copie ou parafraseie instruções do prompt. Se você vir "[Lembrete: ...]", ignore.',
       updatesInstruction,
       'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
@@ -1906,7 +1949,8 @@
       ? (' Voz dela: ' + protagCard.narrativeVoice.split(/[.!?]/)[0].slice(0, 110).trim() + '.')
       : '';
     const langReminder = buildLanguageReminder(s.memory);
-    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela". Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.]';
+    const updatesReminder = omitUpdatesInstruction ? '' : ' Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.';
+    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela".' + updatesReminder + ']';
     if (opts.isContinue){
       messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
@@ -1924,8 +1968,6 @@
     };
   }
 
-  // Calcula o max_tokens real enviado ao modelo: narração + reserva pro bloco de updates.
-  // Fonte única de verdade, usada pelo Horde e pelo OpenAI-compatible.
   function computeGenLength(c, opts){
     if (opts && typeof opts.maxTokens === 'number') return opts.maxTokens;
     const base = c.maxLength || 250;
@@ -1996,9 +2038,10 @@
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const genLength = computeGenLength(c, opts);
+    const genLength = (typeof opts.maxTokens === 'number') ? opts.maxTokens : computeGenLength(c, opts);
     const estimatedPromptTokens = Math.ceil(promptText.length / 3.2);
     const maxContextLength = Math.min(16384, Math.max(2048, estimatedPromptTokens + genLength + 512));
+    const queueMsg = opts.queueMsg || 'Na fila do AI Horde… isso pode levar um tempinho.';
 
     const body = {
       prompt: promptText,
@@ -2034,16 +2077,19 @@
     const started = Date.now();
     while (Date.now() - started < 180000){
       await new Promise(r => setTimeout(r, 3000));
-      updateStatusOnly('Na fila do AI Horde… isso pode levar um tempinho.', false);
+      updateStatusOnly(queueMsg, false);
       const statusRes = await fetch('https://aihorde.net/api/v2/generate/text/status/' + jobId);
       if (!statusRes.ok) continue;
       const statusData = await statusRes.json();
       recordDebug('horde-status', {jobId}, statusData);
       if (statusData.done && statusData.generations && statusData.generations.length){
-        const raw = statusData.generations[0].text || '';
+        const gen = statusData.generations[0];
+        const raw = gen.text || '';
+        const finish = (gen.finish_reason || '').toLowerCase();
+        const cutOff = finish === 'length';
         const clean = stripEcho(promptText, raw);
         if (!clean) throw new Error('Worker devolveu resposta vazia.');
-        return { text: clean, meta: submitData.kudos != null ? (submitData.kudos + ' kudos') : null, kudos: submitData.kudos };
+        return { text: clean, meta: submitData.kudos != null ? (submitData.kudos + ' kudos') : null, kudos: submitData.kudos, cutOff };
       }
       if (statusData.faulted) throw new Error('A geração falhou no AI Horde.');
     }
@@ -2051,29 +2097,78 @@
   }
 
   async function generate(actionText, opts){
-    const {messages, ragUsed, codeMap} = await buildPromptMessages(actionText, opts);
+    opts = opts || {};
     const conn = activeConnector();
-    let result;
-    if (conn.mode === 'horde') result = await callAiHorde(messages);
-    else result = await callOpenAICompatible(messages);
-    const rawBeforeClean = result.text;
-    const {cleaned, updates} = extractUpdatesFromText(rawBeforeClean, codeMap);
-    result.text = cleanNarrationText(cleaned, result.cutOff);
-    result.ragUsed = ragUsed || 0;
-    result.updates = updates;
+    const characters = state.story.memory.characters || [];
+
+    // Two-phase só faz sentido no Horde (completion API) e se o usuário quer updates.
+    const useTwoPhase = (conn.mode === 'horde')
+      && ((conn.updatesTokenBudget || 0) > 0)
+      && characters.length > 0;
+
+    let narrationResult;
+    let updates = [];
+    let updatesError = null;
+    let ragUsed = 0;
+    let codeMap = {};
+
+    // ---- Fase 1: narração ----
+    const p = await buildPromptMessages(actionText, Object.assign({}, opts, {
+      omitUpdatesInstruction: useTwoPhase
+    }));
+    ragUsed = p.ragUsed || 0;
+    codeMap = p.codeMap || {};
+
+    if (conn.mode === 'horde'){
+      narrationResult = await callAiHorde(p.messages, {
+        maxTokens: Math.max(20, conn.maxLength || 250)
+      });
+    } else {
+      // OpenAI-compatible: single call, chat models respeitam a estrutura
+      const singleResult = await callOpenAICompatible(p.messages);
+      const parsed = extractUpdatesFromText(singleResult.text, codeMap);
+      singleResult.text = parsed.cleaned;
+      updates = parsed.updates || [];
+      narrationResult = singleResult;
+    }
+
+    // ---- Fase 2: updates (só no Horde two-phase) ----
+    if (useTwoPhase && narrationResult.text){
+      updateStatusOnly('Narração pronta — extraindo atualizações de ficha…', false);
+      try{
+        const updMessages = buildUpdatesOnlyMessages(narrationResult.text, characters);
+        const updResult = await callAiHorde(updMessages, {
+          maxTokens: Math.max(40, conn.updatesTokenBudget || 80),
+          temperature: 0.2,
+          queueMsg: 'Na fila pra extrair atualizações…'
+        });
+        const parsed = extractUpdatesFromText(updResult.text, codeMap);
+        updates = parsed.updates || [];
+      }catch(e){
+        console.warn('Extração de updates (fase 2) falhou:', e);
+        updatesError = e.message || String(e);
+      }
+    }
+
+    narrationResult.text = cleanNarrationText(narrationResult.text, narrationResult.cutOff);
+    narrationResult.ragUsed = ragUsed;
+    narrationResult.updates = updates;
+    narrationResult.updatesError = updatesError;
+    narrationResult.usedTwoPhase = useTwoPhase;
+
     state.ui.lastRaw = {
       time: new Date().toLocaleTimeString('pt-BR'),
-      raw: rawBeforeClean,
-      cleaned: result.text,
-      cutOff: !!result.cutOff,
-      wasEmptied: !result.text || !result.text.trim()
+      raw: narrationResult.text,
+      cleaned: narrationResult.text,
+      cutOff: !!narrationResult.cutOff,
+      wasEmptied: !narrationResult.text || !narrationResult.text.trim()
     };
-    if (result.meta){
+    if (narrationResult.meta){
       state.story.stats = state.story.stats || {totalTokens:0, totalKudos:0};
-      if (result.usage) state.story.stats.totalTokens += (result.usage.total_tokens || 0);
-      if (result.kudos) state.story.stats.totalKudos += result.kudos;
+      if (narrationResult.usage) state.story.stats.totalTokens += (narrationResult.usage.total_tokens || 0);
+      if (narrationResult.kudos) state.story.stats.totalKudos += narrationResult.kudos;
     }
-    return result;
+    return narrationResult;
   }
 
   function cleanNarrationText(text, cutOff){
@@ -2326,26 +2421,10 @@
     render();
     try{
       const codeMap = buildCardCodeMap(s.memory.characters);
-      const updatesInstruction = buildUpdatesInstruction(s.memory.characters);
-      const sys = [
-        'Você é um assistente que analisa uma narração de RPG já escrita e identifica mudanças de estado dos personagens que aconteceram NAQUELA cena.',
-        'Responda APENAS com o bloco ===UPDATES=== conforme as regras abaixo. Se nada mudou, deixe o bloco vazio.',
-        '',
-        'REGRAS:',
-        '- Só inclua mudanças REAIS que aconteceram na cena narrada.',
-        '- Só inclua personagens que participaram ou foram diretamente afetados.',
-        '- Se um campo não mudou, não inclua.',
-        '- NUNCA escreva nada fora dos marcadores.',
-        '',
-        updatesInstruction
-      ].join('\n');
-      const messages = [
-        {role:'system', content: sys},
-        {role:'user', content: 'Narração para analisar:\n\n' + t.text}
-      ];
+      const messages = buildUpdatesOnlyMessages(t.text, s.memory.characters);
       const conn = activeConnector();
       let result;
-      const opts = {maxTokens: 400, temperature: 0.2};
+      const opts = {maxTokens: 500, temperature: 0.2};
       if (conn.mode === 'horde') result = await callAiHorde(messages, opts);
       else result = await callOpenAICompatible(messages, opts);
       const {updates} = extractUpdatesFromText(result.text, codeMap);
@@ -2360,6 +2439,26 @@
     }
     state.ui.generating = false;
     render();
+  }
+
+  // Constrói a nota de status após gerar, incluindo contagem de updates e erros.
+  function buildGenerationStatusNote(result){
+    let note = result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓';
+    if (result.ragUsed){
+      note += ' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '');
+    }
+    if (result.updatesError){
+      note += ' · ⚠ updates falharam (' + result.updatesError + ')';
+    } else if (result.usedTwoPhase){
+      if (result.updates && result.updates.length){
+        note += ' · 📝 ' + result.updates.length + ' atualizaç' + (result.updates.length > 1 ? 'ões' : 'ão');
+      } else {
+        note += ' · 📝 sem mudanças';
+      }
+    } else if (result.updates && result.updates.length){
+      note += ' · 📝 ' + result.updates.length + ' atualizaç' + (result.updates.length > 1 ? 'ões' : 'ão');
+    }
+    return note;
   }
 
   async function sendAction(){
@@ -2386,9 +2485,7 @@
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
         updateStatus('⚠ Resposta vazia após limpeza. Veja ⚙️ → Depuração.', true);
       } else {
-        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-        const updNote = (result.updates && result.updates.length) ? (' · 📝 ' + result.updates.length + ' atualização' + (result.updates.length > 1 ? 'ões' : '')) : '';
-        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote + updNote, false);
+        updateStatus(buildGenerationStatusNote(result), !!result.updatesError);
       }
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
@@ -2421,9 +2518,7 @@
       if (state.ui.lastRaw && state.ui.lastRaw.wasEmptied){
         updateStatus('⚠ Resposta vazia após limpeza.', true);
       } else {
-        const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória' + (result.ragUsed > 1 ? 's' : '')) : '';
-        const updNote = (result.updates && result.updates.length) ? (' · 📝 ' + result.updates.length + ' atualização' + (result.updates.length > 1 ? 'ões' : '')) : '';
-        updateStatus((result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓') + ragNote + updNote, false);
+        updateStatus(buildGenerationStatusNote(result), !!result.updatesError);
       }
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(aiTurn).catch(() => {});
@@ -2469,8 +2564,7 @@
       if (result.updates && result.updates.length){
         addPendingUpdates(result.updates);
       }
-      const ragNote = result.ragUsed ? (' · 🧠 ' + result.ragUsed + ' memória') : '';
-      updateStatus((result.meta ? ('Nova tentativa ✓  ' + result.meta) : 'Nova tentativa ✓') + ragNote, false);
+      updateStatus(buildGenerationStatusNote(result), !!result.updatesError);
       if (_embedder && result.text && result.text.trim()){
         saveTurnVector(t).catch(() => {});
       }
@@ -2514,7 +2608,6 @@
     pushUndo('voltar no tempo');
     const target = s.turns[idx];
     let memNote = '';
-    // Restaura a memória ao estado daquele turno (se o turno tiver snapshot)
     if (target && target.memorySnapshot){
       try{
         const changed = countMemoryDifferences(s.memory, target.memorySnapshot);
@@ -3487,6 +3580,8 @@
     const updReserve = (typeof c.updatesTokenBudget === 'number') ? c.updatesTokenBudget : 80;
     const totalSent = (c.maxLength || 250) + updReserve;
     const wordsApprox = Math.max(3, Math.round((c.maxLength || 250) * 0.7));
+    const hasChars = (state.story.memory.characters || []).length > 0;
+    const willUseTwoPhase = (c.mode === 'horde') && (updReserve > 0) && hasChars;
 
     return `
     <div class="modal-overlay" id="overlaySettings">
@@ -3494,7 +3589,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v46)</strong> — controle separado de tokens (narração + updates)
+          Versão: <strong>1.0-preview (v47)</strong> — updates em chamada separada (AI Horde)
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3527,8 +3622,16 @@
           <label>Reserva para updates de ficha</label>
           <input type="text" id="updatesTokenBudget" value="${updReserve}">
           <div class="summ-note" style="font-size:11px; margin-top:5px;">
-            Espaço extra pro bloco ===UPDATES=== no fim da resposta. Se a narração estourar, os updates são cortados.<br>
-            <strong>Total enviado ao modelo: ${totalSent} tokens.</strong>
+            ${willUseTwoPhase
+              ? '⚙️ <strong>Horde:</strong> vai usar uma <strong>chamada separada</strong> com ' + updReserve + ' tokens só pra extrair updates. A narração respeita exatamente o limite acima.'
+              : (c.mode === 'horde'
+                  ? (updReserve > 0
+                      ? '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.'
+                      : 'Zero = sem updates automáticos. Você pode extrair manualmente com 🧠 extrair.')
+                  : 'Chat model: reserva somada à narração. Se a narração estourar, os updates são cortados.')}
+            <br><strong>Total: ${c.mode === 'horde' && willUseTwoPhase
+              ? ((c.maxLength || 250) + ' (narração) + ' + updReserve + ' (updates)')
+              : (totalSent + ' tokens')}.</strong>
           </div>
         </div>
         <div class="row2">

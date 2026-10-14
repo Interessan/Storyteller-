@@ -900,6 +900,9 @@
       hordeKey: '0000000000',
       hordeNsfw: true,
       hordeModels: '',
+      colabEndpoint: '',
+      colabModel: 'local-model',
+      colabKey: '',
       oaEndpoint: '',
       oaKey: '',
       oaModel: '',
@@ -1467,6 +1470,9 @@
     if (typeof state.connector.updatesTokenBudget !== 'number'){
       state.connector.updatesTokenBudget = 80;
     }
+    if (typeof state.connector.colabEndpoint !== 'string') state.connector.colabEndpoint = '';
+    if (typeof state.connector.colabModel !== 'string') state.connector.colabModel = 'local-model';
+    if (typeof state.connector.colabKey !== 'string') state.connector.colabKey = '';
     if (state.connector.mode === 'builtin'){
       state.connector.mode = 'horde';
     }
@@ -1748,6 +1754,9 @@
     return 'TRECHOS RELEVANTES DA HISTÓRIA (recuperados por similaridade com a ação atual — use como contexto vivo, NÃO repita literalmente nem mencione que "lembrou"):\n' + lines.join('\n\n');
   }
 
+  // ============ UPDATES: instrução para reescrita completa ============
+  // Campos relationship/wants/status: substituem se mudam. knows: reescreve a lista
+  // completa mantendo o que já existia + adicionando o novo.
   function buildUpdatesInstruction(characters){
     if (!characters || !characters.length) return '';
     const codes = characters.map((c, i) => {
@@ -1758,18 +1767,18 @@
       'BLOCO DE ATUALIZAÇÕES DE ESTADO (OBRIGATÓRIO):',
       'Depois de toda a narração, no FINAL ABSOLUTO da resposta, adicione um bloco começando com a linha exata "===UPDATES===" e terminando com a linha exata "===END UPDATES===".',
       '',
-      'Cada linha entre os marcadores representa UMA mudança real de estado que aconteceu NA CENA narrada. Formato:',
-      '[CÓDIGO] campo: novo valor',
+      'Cada linha entre os marcadores REESCREVE um campo do personagem com o valor COMPLETO ATUALIZADO. NÃO é um anexo nem um delta — é o novo valor inteiro do campo.',
+      'Formato: [CÓDIGO] campo: valor completo atualizado',
       '',
-      'Campos válidos (só use estes):',
-      '- relationship: como o personagem se sente em relação à protagonista agora (frase curta)',
-      '- knows: o que ele sabe até agora (lista completa atualizada, substitui o valor anterior)',
-      '- wants: o que ele quer agora / objetivo atual (frase curta)',
-      '- status: um dos valores exatos: vivo | morto | desaparecido | desconhecido',
+      'Campos válidos (só estes):',
+      '- relationship: relação dele com a protagonista AGORA. Se mudou nesta cena, reescreva a frase inteira descrevendo a relação atual. Se não mudou, NÃO inclua a linha.',
+      '- knows: lista COMPLETA do que ele sabe até agora. MANTENHA o que já estava na ficha dele + ADICIONE o que ele aprendeu nesta cena. NUNCA remova informação antiga sem motivo óbvio (ele morreu, descobriu que era mentira, amnésia). Reescreva a lista inteira num formato limpo.',
+      '- wants: objetivo atual dele. Pode manter o anterior, complementar, ou substituir por um novo. Reescreva a frase completa.',
+      '- status: um dos valores exatos: vivo | morto | desaparecido | desconhecido. Só inclua se MUDOU nesta cena.',
       '',
       'REGRAS IMPORTANTES:',
-      '- Só inclua mudanças REAIS que aconteceram na cena. NÃO invente.',
-      '- Só inclua mudanças em personagens que participaram ou foram diretamente afetados pela cena.',
+      '- NÃO invente informação. Use só o que já existia na ficha + o que aconteceu nesta cena.',
+      '- Só inclua personagens que participaram ou foram diretamente afetados pela cena.',
       '- Se um campo NÃO mudou, NÃO inclua aquela linha.',
       '- Se NADA mudou, deixe o bloco vazio (apenas ===UPDATES=== seguido de ===END UPDATES===).',
       '- Use APENAS os códigos listados abaixo, no formato [cXXX].',
@@ -1780,10 +1789,25 @@
     ].join('\n');
   }
 
-  // Prompt enxuto só pra extrair updates. Aceita:
-  //   - string (um texto de narração só)
-  //   - um turn {text, sourceAction?}
-  //   - um array de turns [{text, sourceAction?}, ...] em ordem cronológica
+  // Constrói o bloco do estado atual dos personagens (os 4 campos vivos)
+  // que é anexado ao prompt de extração para que a IA consiga reescrever com base no que já existia.
+  function buildCurrentStateBlock(characters){
+    if (!characters || !characters.length) return '';
+    const lines = characters.map((c, i) => {
+      const code = 'c' + String(i + 1).padStart(3, '0');
+      const parts = ['[' + code + '] ' + (c.name || 'Sem nome')];
+      parts.push('  relationship: ' + (c.relationship || '(vazio)'));
+      parts.push('  knows: ' + (c.knows || '(vazio)'));
+      parts.push('  wants: ' + (c.wants || '(vazio)'));
+      parts.push('  status: ' + (c.status || 'vivo'));
+      return parts.join('\n');
+    });
+    return lines.join('\n');
+  }
+
+  // Prompt de extração (fase 2 e também o extrator multi-turno manual).
+  // Aceita: string | turn {text, sourceAction?} | array de turns.
+  // Sempre inclui o estado atual dos personagens para que a IA possa reescrever.
   function buildUpdatesOnlyMessages(input, characters){
     let turns;
     if (typeof input === 'string'){
@@ -1801,26 +1825,33 @@
       return '[' + code + '] ' + (c.name || 'Sem nome');
     }).join('\n');
 
+    const currentState = buildCurrentStateBlock(characters);
+
     const isMulti = turns.length > 1;
     const sys = [
-      'Você é um assistente que analisa narrações de RPG já escritas e identifica mudanças de estado dos personagens que aconteceram NAQUELAS cenas.',
+      'Você é um assistente que analisa narrações de RPG e ATUALIZA o estado dos personagens afetados.',
       isMulti
-        ? 'Você vai receber VÁRIOS turnos em ordem cronológica. Analise TODOS e produza o estado FINAL consolidado (se um campo mudou várias vezes, use o VALOR MAIS RECENTE).'
+        ? 'Você vai receber VÁRIOS turnos em ordem cronológica. Considere TUDO e produza o estado FINAL consolidado (se um campo mudou várias vezes, use o valor MAIS RECENTE).'
         : '',
+      '',
+      'Você recebe o ESTADO ATUAL dos personagens (com os campos vivos). Sua tarefa é identificar o que MUDOU nas narrações e REESCREVER apenas os campos que mudaram.',
       '',
       'FORMATO OBRIGATÓRIO: sua resposta INTEIRA deve ser um bloco começando com a linha exata "===UPDATES===" e terminando com a linha exata "===END UPDATES===".',
       'Se nada mudou, responda apenas as duas linhas vazias (===UPDATES=== seguido de ===END UPDATES===).',
       'NUNCA escreva nada fora dessas duas linhas. NÃO escreva comentários, explicações, saudações nem a narração de volta.',
       '',
-      'Cada linha entre os marcadores representa UMA mudança real de estado NA CENA. Formato:',
-      '[CÓDIGO] campo: novo valor',
+      'Cada linha entre os marcadores REESCREVE um campo com o valor COMPLETO (não é anexo, é o novo valor inteiro). Formato:',
+      '[CÓDIGO] campo: valor completo atualizado',
       '',
       'Campos válidos: relationship | knows | wants | status',
       '',
       'REGRAS:',
-      '- Só inclua mudanças REAIS que aconteceram nas cenas. NÃO invente.',
-      '- Só inclua personagens que participaram ou foram diretamente afetados.',
-      '- Se um campo NÃO mudou, NÃO inclua aquela linha.',
+      '- relationship: relação dele com a protagonista AGORA. Se mudou, reescreva a frase inteira. Se não mudou, NÃO inclua.',
+      '- knows: lista COMPLETA do que ele sabe. MANTENHA o que já estava no estado atual + ADICIONE o que ele aprendeu nas narrações. NUNCA remova info antiga sem motivo óbvio.',
+      '- wants: objetivo atual. Pode manter, complementar ou substituir.',
+      '- status: vivo | morto | desaparecido | desconhecido. Só inclua se MUDOU.',
+      '- NÃO invente. Use só o estado atual + as narrações.',
+      '- Só inclua personagens afetados diretamente.',
       '- Use APENAS os códigos abaixo, no formato [cXXX].',
       '',
       'Personagens disponíveis com códigos:',
@@ -1836,24 +1867,31 @@
         return lines.join('\n');
       }).join('\n\n---\n\n');
       userMsg = [
-        'TURNOS PARA ANALISAR (em ordem cronológica):',
+        '=== ESTADO ATUAL DOS PERSONAGENS ===',
+        currentState,
+        '=== FIM DO ESTADO ATUAL ===',
+        '',
+        '=== TURNOS PARA ANALISAR (em ordem cronológica) ===',
         '',
         blocks,
         '',
-        '---',
-        'Agora escreva o bloco ===UPDATES=== considerando TODOS os turnos acima. Se um campo mudou várias vezes, use o valor MAIS RECENTE. Comece a resposta exatamente com "===UPDATES===".'
+        '=== FIM DOS TURNOS ===',
+        '',
+        'Agora escreva o bloco ===UPDATES=== considerando TODOS os turnos acima. Se um campo mudou várias vezes, use o valor MAIS RECENTE. Campos que não mudaram NÃO devem aparecer. Comece a resposta exatamente com "===UPDATES===".'
       ].join('\n');
     } else {
       const t = turns[0];
       userMsg = [
+        '=== ESTADO ATUAL DOS PERSONAGENS ===',
+        currentState,
+        '=== FIM DO ESTADO ATUAL ===',
+        '',
+        '=== TRECHO PARA ANALISAR ===',
         t.sourceAction ? ('AÇÃO DO JOGADOR: ' + t.sourceAction) : '',
-        t.sourceAction ? '' : '',
-        'NARRAÇÃO PARA ANALISAR:',
+        'NARRAÇÃO: ' + (t.text || ''),
+        '=== FIM DO TRECHO ===',
         '',
-        t.text || '',
-        '',
-        '---',
-        'Agora escreva o bloco ===UPDATES=== (ou vazio, se nada mudou). Comece a resposta exatamente com "===UPDATES===".'
+        'Agora escreva o bloco ===UPDATES=== (ou vazio, se nada mudou). Campos que não mudaram NÃO devem aparecer. Comece a resposta exatamente com "===UPDATES===".'
       ].filter(l => l !== '').join('\n');
     }
 
@@ -2044,6 +2082,30 @@
     return Math.max(1, base + reserve);
   }
 
+  // Retorna {endpoint, model, key} para o modo atual (colab ou openai)
+  function getApiConfig(){
+    const c = activeConnector();
+    if (c.mode === 'colab'){
+      return {
+        endpoint: c.colabEndpoint || '',
+        model: c.colabModel || 'local-model',
+        key: c.colabKey || ''
+      };
+    }
+    return {
+      endpoint: c.oaEndpoint || '',
+      model: c.oaModel || '',
+      key: c.oaKey || ''
+    };
+  }
+
+  // Despacha pra API certa com base no modo atual.
+  async function callApi(messages, opts){
+    const conn = activeConnector();
+    if (conn.mode === 'horde') return callAiHorde(messages, opts);
+    return callOpenAICompatible(messages, opts);
+  }
+
   function stripEcho(promptTail, text){
     if (!text) return text;
     let t = text.trim();
@@ -2057,19 +2119,20 @@
     opts = opts || {};
     attempt = attempt || 1;
     const c = activeConnector();
-    if (!c.oaEndpoint) throw new Error('Configure o endpoint da API nas Configurações.');
-    if (!c.oaModel) throw new Error('Preencha o nome do modelo nas Configurações.');
+    const cfg = getApiConfig();
+    if (!cfg.endpoint) throw new Error('Configure o endpoint da API nas Configurações.');
+    if (!cfg.model) throw new Error('Preencha o nome do modelo nas Configurações.');
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
     const maxTokens = computeGenLength(c, opts);
     const headers = {'Content-Type':'application/json'};
-    if (c.oaKey) headers['Authorization'] = 'Bearer ' + c.oaKey;
-    const reqBody = { model: c.oaModel, messages, max_tokens: maxTokens, temperature };
+    if (cfg.key) headers['Authorization'] = 'Bearer ' + cfg.key;
+    const reqBody = { model: cfg.model, messages, max_tokens: maxTokens, temperature };
     let res, data;
     try{
-      res = await fetch(c.oaEndpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
+      res = await fetch(cfg.endpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
     }catch(err){
-      recordDebug('openai', reqBody, null, err.message);
-      throw new Error('Falha de rede ao chamar a API.');
+      recordDebug(c.mode || 'openai', reqBody, null, err.message);
+      throw new Error('Falha de rede ao chamar a API (' + err.message + '). Se estiver usando Colab, confira se o túnel ainda está ativo e se o link termina com /v1.');
     }
     if (res.status === 429 && attempt < 4){
       const t = await res.text().catch(()=> '');
@@ -2083,11 +2146,11 @@
     }
     if (!res.ok){
       const t = await res.text().catch(()=> '');
-      recordDebug('openai', reqBody, t);
+      recordDebug(c.mode || 'openai', reqBody, t);
       throw new Error('API respondeu ' + res.status + ': ' + t.slice(0,200));
     }
     data = await res.json();
-    recordDebug('openai', reqBody, data);
+    recordDebug(c.mode || 'openai', reqBody, data);
     const choice = data.choices && data.choices[0];
     const text = choice && (choice.message ? choice.message.content : choice.text);
     if (!text) throw new Error('Resposta da API veio sem texto.');
@@ -2170,7 +2233,9 @@
     const conn = activeConnector();
     const characters = state.story.memory.characters || [];
 
-    const useTwoPhase = (conn.mode === 'horde')
+    // Two-phase faz sentido em Horde (queue) e Colab (local, rápido). Não em
+    // OpenAI-compatible genérico (custo por chamada).
+    const useTwoPhase = (conn.mode === 'horde' || conn.mode === 'colab')
       && ((conn.updatesTokenBudget || 0) > 0)
       && characters.length > 0;
 
@@ -2180,32 +2245,26 @@
     let ragUsed = 0;
     let codeMap = {};
 
+    // Fase 1: narração
     const p = await buildPromptMessages(actionText, Object.assign({}, opts, {
       omitUpdatesInstruction: useTwoPhase
     }));
     ragUsed = p.ragUsed || 0;
     codeMap = p.codeMap || {};
 
-    if (conn.mode === 'horde'){
-      narrationResult = await callAiHorde(p.messages, {
-        maxTokens: Math.max(20, conn.maxLength || 250)
-      });
-    } else {
-      const singleResult = await callOpenAICompatible(p.messages);
-      const parsed = extractUpdatesFromText(singleResult.text, codeMap);
-      singleResult.text = parsed.cleaned;
-      updates = parsed.updates || [];
-      narrationResult = singleResult;
-    }
+    narrationResult = await callApi(p.messages, {
+      maxTokens: Math.max(20, conn.maxLength || 250)
+    });
 
+    // Fase 2: updates
     if (useTwoPhase && narrationResult.text){
       updateStatusOnly('Narração pronta — extraindo atualizações de ficha…', false);
       try{
         const updMessages = buildUpdatesOnlyMessages(narrationResult.text, characters);
-        const updResult = await callAiHorde(updMessages, {
-          maxTokens: Math.max(40, conn.updatesTokenBudget || 80),
+        const updResult = await callApi(updMessages, {
+          maxTokens: Math.max(120, conn.updatesTokenBudget || 80),
           temperature: 0.2,
-          queueMsg: 'Na fila pra extrair atualizações…'
+          queueMsg: 'Extraindo atualizações…'
         });
         const parsed = extractUpdatesFromText(updResult.text, codeMap);
         updates = parsed.updates || [];
@@ -2213,6 +2272,11 @@
         console.warn('Extração de updates (fase 2) falhou:', e);
         updatesError = e.message || String(e);
       }
+    } else if (!useTwoPhase){
+      // Single-call: extrai updates do mesmo texto
+      const parsed = extractUpdatesFromText(narrationResult.text, codeMap);
+      narrationResult.text = parsed.cleaned;
+      updates = parsed.updates || [];
     }
 
     narrationResult.text = cleanNarrationText(narrationResult.text, narrationResult.cutOff);
@@ -2236,25 +2300,18 @@
     return narrationResult;
   }
 
-  // Corta o texto num ponto "seguro": prefere quebra de parágrafo,
-  // depois fim de frase (evitando abreviações tipo "Sr."), depois espaço.
   function trimToLastSentence(text){
     if (!text) return text;
     const trimmed = text.trim();
     if (!trimmed) return trimmed;
-
-    // Já termina bem? Devolve como está.
     if (/[.!?…]["')\]]?\s*$/.test(trimmed)) return trimmed;
 
-    // Prefere quebra de parágrafo na segunda metade do texto.
     const paraIdx = trimmed.lastIndexOf('\n\n');
     if (paraIdx > 30 && paraIdx > trimmed.length * 0.4){
       const cut = trimmed.slice(0, paraIdx).trim();
       if (cut) return cut;
     }
 
-    // Fim de frase: [.!?…] seguido de (aspas/parênteses opcionais) + espaço + letra maiúscula ou fim de string.
-    // Isso evita cortar em "Sr.", "etc.", "p.ex." etc.
     const re = /[.!?…](["')\]]?)(\s+[A-ZÀ-Ú"'\-—(]|$)/g;
     let lastGood = -1;
     let m;
@@ -2266,7 +2323,6 @@
       if (cut) return cut;
     }
 
-    // Fallback: último espaço.
     const lastSpace = trimmed.lastIndexOf(' ');
     if (lastSpace > 20){
       return trimmed.slice(0, lastSpace).trim();
@@ -2333,7 +2389,7 @@
   }
 
   // ========================================================================
-  // SNAPSHOT DE MEMÓRIA (undo/redo/rewind restauram fichas + memória)
+  // SNAPSHOT DE MEMÓRIA
   // ========================================================================
   function snapshotMemoryDeep(){
     try{ return JSON.parse(JSON.stringify(state.story.memory)); }
@@ -2409,8 +2465,6 @@
     status: 'Status'
   };
 
-  // Adiciona updates pendentes. Se já existir um pendente com o mesmo cardId+campo,
-  // o NOVO substitui (o mais recente vence).
   function addPendingUpdates(rawUpdates){
     if (!rawUpdates || !rawUpdates.length) return;
     const s = state.story;
@@ -2420,7 +2474,6 @@
       const card = (s.memory.characters || []).find(c => c.id === u.cardId);
       if (!card) return;
       const key = u.cardId + '|' + u.field;
-      // Remove pendente antigo com o mesmo card+campo
       state.ui.pendingUpdates.items = state.ui.pendingUpdates.items.filter(it => (it.cardId + '|' + it.field) !== key);
       let oldValue = '';
       if (u.field === 'status') oldValue = card.status || 'vivo';
@@ -2508,7 +2561,6 @@
       updateStatus('Cadastre pelo menos um personagem antes de extrair atualizações.', true);
       return;
     }
-    // Padrão: últimos 3 turnos de IA selecionados
     const defaultSelected = aiTurns.slice(-3).map(t => t.id);
     state.ui.extractPicker = {
       open: true,
@@ -2537,7 +2589,6 @@
     const ep = state.ui.extractPicker;
     if (!ep || !ep.selectedIds.length || ep.loading) return;
     const s = state.story;
-    // Ordem cronológica (índice do turno no array principal)
     const selected = s.turns
       .map((t, i) => ({ t, i }))
       .filter(x => ep.selectedIds.includes(x.t.id))
@@ -2561,17 +2612,14 @@
     try{
       const codeMap = buildCardCodeMap(s.memory.characters);
       const messages = buildUpdatesOnlyMessages(selected, s.memory.characters);
-      const conn = activeConnector();
-      const totalText = selected.reduce((sum, t) => sum + (t.text || '').length, 0);
+      const totalText = selected.reduce((sum, t) => sum + (t.text || '').length + (t.sourceAction || '').length, 0);
       const estTokens = Math.ceil(totalText / 3.2);
       const opts = {
-        maxTokens: Math.max(200, Math.min(800, estTokens + 150)),
+        maxTokens: Math.max(300, Math.min(1200, estTokens + 300)),
         temperature: 0.2,
         queueMsg: 'Analisando ' + selected.length + ' turno' + (selected.length > 1 ? 's' : '') + '…'
       };
-      let result;
-      if (conn.mode === 'horde') result = await callAiHorde(messages, opts);
-      else result = await callOpenAICompatible(messages, opts);
+      const result = await callApi(messages, opts);
       const {updates} = extractUpdatesFromText(result.text, codeMap);
 
       if (updates.length){
@@ -2591,7 +2639,6 @@
     }
   }
 
-  // Constrói a nota de status após gerar, incluindo contagem de updates e erros.
   function buildGenerationStatusNote(result){
     let note = result.meta ? ('Gerado ✓  ' + result.meta) : 'Gerado ✓';
     if (result.ragUsed){
@@ -2839,11 +2886,8 @@
         {role:'system', content: sysPrompt},
         {role:'user', content: 'Passagem a resumir:\n\n' + text}
       ];
-      const conn = activeConnector();
       const sumOpts = {temperature: 0.3, maxTokens: 600};
-      let result;
-      if (conn.mode === 'horde') result = await callAiHorde(messages, sumOpts);
-      else result = await callOpenAICompatible(messages, sumOpts);
+      const result = await callApi(messages, sumOpts);
 
       state.ui.pendingSummary = {
         text: cleanNarrationText(result.text, result.cutOff),
@@ -3181,7 +3225,6 @@
     if (!ep || !ep.open) return '';
     const s = state.story;
     const aiTurns = s.turns.filter(t => t.type === 'ai');
-    // Mais recentes no topo
     const items = aiTurns.slice().reverse();
 
     const selectedTurns = s.turns.filter(t => ep.selectedIds.includes(t.id));
@@ -3197,8 +3240,8 @@
             <div class="sub">Escolha quais trechos a IA deve analisar</div>
 
             <div class="helpbox" style="margin-bottom:12px; font-size:12px;">
-              A IA vai ler os trechos em ordem cronológica e identificar mudanças de estado (relação, o que sabe, o que quer, status).<br>
-              <span style="opacity:.85;">Se um mesmo campo mudar várias vezes, o <strong>valor mais recente</strong> vence.</span>
+              A IA vai ler os trechos em ordem cronológica <strong>+ o estado atual das fichas</strong> e reescrever os campos afetados.<br>
+              <span style="opacity:.85;">A <code>knows</code> mantém o que já estava + adiciona o novo. As outras substituem, se mudarem.</span>
             </div>
 
             <div class="extract-list">
@@ -3795,7 +3838,21 @@
     const totalSent = (c.maxLength || 250) + updReserve;
     const wordsApprox = Math.max(3, Math.round((c.maxLength || 250) * 0.7));
     const hasChars = (state.story.memory.characters || []).length > 0;
-    const willUseTwoPhase = (c.mode === 'horde') && (updReserve > 0) && hasChars;
+    const willUseTwoPhase = (c.mode === 'horde' || c.mode === 'colab') && (updReserve > 0) && hasChars;
+
+    const twoPhaseNote = (() => {
+      if (!willUseTwoPhase){
+        if (c.mode === 'colab' || c.mode === 'horde'){
+          if (updReserve <= 0) return 'Zero = sem updates automáticos. Use 🧠 extrair quando quiser.';
+          return '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.';
+        }
+        return 'Chat model: reserva somada à narração. Se a narração estourar, os updates são cortados.';
+      }
+      if (c.mode === 'horde'){
+        return '⚙️ <strong>Horde:</strong> extração em <strong>chamada separada</strong> com ' + updReserve + ' tokens só pra updates. A narração respeita exatamente o limite acima (mas espera 2x na fila).';
+      }
+      return '⚙️ <strong>Colab:</strong> extração em <strong>chamada separada</strong> com ' + updReserve + ' tokens só pra updates. Local, então é rápido. A narração respeita o limite acima.';
+    })();
 
     return `
     <div class="modal-overlay" id="overlaySettings">
@@ -3803,12 +3860,13 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v48)</strong> — extração multi-turno + trim inteligente
+          Versão: <strong>1.0-preview (v49)</strong> — Colab nativo + fichas com reescrita completa
         </div>
         <div class="field">
           <label>Provedor</label>
           <select id="connMode">
             <option value="horde" ${c.mode==='horde'?'selected':''}>AI Horde (gratuito, aceita NSFW)</option>
+            <option value="colab" ${c.mode==='colab'?'selected':''}>Colab / llama-cpp-python (local)</option>
             <option value="openai" ${c.mode==='openai'?'selected':''}>Compatível com OpenAI</option>
           </select>
         </div>
@@ -3817,6 +3875,26 @@
           <div class="field"><label>Chave do AI Horde</label><input type="text" id="hordeKey" value="${esc(c.hordeKey)}" placeholder="0000000000 = anônimo"></div>
           <div class="field"><label><input type="checkbox" id="hordeNsfw" ${c.hordeNsfw?'checked':''}> Permitir NSFW</label></div>
           <div class="field"><label>Modelos preferidos (separados por vírgula)</label><input type="text" id="hordeModels" value="${esc(c.hordeModels)}" placeholder="ex: MythoMax-L2-13B, Fimbulvetr-11B-v2"></div>
+        ` : ''}
+        ${c.mode === 'colab' ? `
+          <div class="field">
+            <label>Endpoint do Colab</label>
+            <input type="text" id="colabEndpoint" value="${esc(c.colabEndpoint)}" placeholder="https://xxx.trycloudflare.com/v1">
+            <div class="summ-note" style="font-size:11px; margin-top:5px;">
+              Cole o link do túnel + <code>/v1</code>. O link muda cada vez que reinicia o Colab.
+            </div>
+          </div>
+          <div class="field">
+            <label>Modelo</label>
+            <input type="text" id="colabModel" value="${esc(c.colabModel || 'local-model')}" placeholder="local-model">
+            <div class="summ-note" style="font-size:11px; margin-top:5px;">
+              Para llama-cpp-python o nome é ignorado — o servidor usa o modelo já carregado. Qualquer coisa serve.
+            </div>
+          </div>
+          <div class="field">
+            <label>Chave (opcional)</label>
+            <input type="text" id="colabKey" value="${esc(c.colabKey)}" placeholder="deixe vazio se não usa">
+          </div>
         ` : ''}
         ${c.mode === 'openai' ? `
           <div class="field"><label>Endpoint</label><input type="text" id="oaEndpoint" value="${esc(c.oaEndpoint)}" placeholder="https://..."></div>
@@ -3836,16 +3914,7 @@
           <label>Reserva para updates de ficha</label>
           <input type="text" id="updatesTokenBudget" value="${updReserve}">
           <div class="summ-note" style="font-size:11px; margin-top:5px;">
-            ${willUseTwoPhase
-              ? '⚙️ <strong>Horde:</strong> vai usar uma <strong>chamada separada</strong> com ' + updReserve + ' tokens só pra extrair updates. A narração respeita exatamente o limite acima.'
-              : (c.mode === 'horde'
-                  ? (updReserve > 0
-                      ? '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.'
-                      : 'Zero = sem updates automáticos. Use 🧠 extrair quando quiser.')
-                  : 'Chat model: reserva somada à narração. Se a narração estourar, os updates são cortados.')}
-            <br><strong>Total: ${c.mode === 'horde' && willUseTwoPhase
-              ? ((c.maxLength || 250) + ' (narração) + ' + updReserve + ' (updates)')
-              : (totalSent + ' tokens')}.</strong>
+            ${twoPhaseNote}
           </div>
         </div>
         <div class="row2">
@@ -4069,14 +4138,10 @@
       if (e.target.id === 'extractPickerOverlay') closeExtractPicker();
     });
     $$('[data-extract-id]').forEach(chk => chk.addEventListener('change', (e) => {
-      // Toggle selection without re-render fighting the checkbox: we re-render anyway,
-      // but preserve the state via state.ui.extractPicker.selectedIds.
       e.stopPropagation();
       toggleExtractSelection(e.target.dataset.extractId);
     }));
-    // Previne que o clique no label (que dispara o toggle do checkbox) também conte duas vezes
     $$('.extract-item').forEach(el => el.addEventListener('click', (e) => {
-      // Se o clique foi direto no checkbox, deixa o handler dele cuidar
       if (e.target.tagName === 'INPUT') return;
       e.preventDefault();
       const chk = el.querySelector('[data-extract-id]');
@@ -4112,6 +4177,10 @@
         const nsfwEl = document.getElementById('hordeNsfw');
         c.hordeNsfw = nsfwEl ? !!nsfwEl.checked : c.hordeNsfw;
         c.hordeModels = g('hordeModels') || '';
+      } else if (c.mode === 'colab'){
+        c.colabEndpoint = (g('colabEndpoint') || '').trim();
+        c.colabModel = (g('colabModel') || 'local-model').trim() || 'local-model';
+        c.colabKey = g('colabKey') || '';
       } else if (c.mode === 'openai'){
         c.oaEndpoint = g('oaEndpoint') || '';
         c.oaKey = g('oaKey') || '';
@@ -4248,10 +4317,8 @@
         {role:'system', content:'Você é um narrador de RPG. Responda em uma única frase.'},
         {role:'user', content:'Teste. Narre em uma frase: "eu abro a porta".'}
       ];
-      const conn = activeConnector();
       const opts = {maxTokens: 60, temperature: 0.5};
-      if (conn.mode === 'horde') await callAiHorde(testMessages, opts);
-      else await callOpenAICompatible(testMessages, opts);
+      await callApi(testMessages, opts);
       state.ui.debugTestError = null;
     }catch(err){
       state.ui.debugTestError = err.message || String(err);

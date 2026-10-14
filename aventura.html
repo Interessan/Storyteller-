@@ -1754,9 +1754,6 @@
     return 'TRECHOS RELEVANTES DA HISTÓRIA (recuperados por similaridade com a ação atual — use como contexto vivo, NÃO repita literalmente nem mencione que "lembrou"):\n' + lines.join('\n\n');
   }
 
-  // ============ UPDATES: instrução para reescrita completa ============
-  // Campos relationship/wants/status: substituem se mudam. knows: reescreve a lista
-  // completa mantendo o que já existia + adicionando o novo.
   function buildUpdatesInstruction(characters){
     if (!characters || !characters.length) return '';
     const codes = characters.map((c, i) => {
@@ -1789,8 +1786,6 @@
     ].join('\n');
   }
 
-  // Constrói o bloco do estado atual dos personagens (os 4 campos vivos)
-  // que é anexado ao prompt de extração para que a IA consiga reescrever com base no que já existia.
   function buildCurrentStateBlock(characters){
     if (!characters || !characters.length) return '';
     const lines = characters.map((c, i) => {
@@ -1805,9 +1800,6 @@
     return lines.join('\n');
   }
 
-  // Prompt de extração (fase 2 e também o extrator multi-turno manual).
-  // Aceita: string | turn {text, sourceAction?} | array de turns.
-  // Sempre inclui o estado atual dos personagens para que a IA possa reescrever.
   function buildUpdatesOnlyMessages(input, characters){
     let turns;
     if (typeof input === 'string'){
@@ -1996,9 +1988,34 @@
     const protagCard = (s.memory.characters || []).find(c => c.isProtagonist);
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
     const languageLine = buildLanguageInstruction(s.memory);
-    const povLine = 'Narre em primeira pessoa E NO TEMPO PRESENTE, como se estivesse acontecendo agora, em tempo real (ex: "eu ando", "eu paro", "eu vejo" — nunca "eu andei", "eu parei", "eu vi", nunca "eu estava andando"). É uma narração contínua, não um relato do passado. O protagonista é sempre "eu" — NUNCA se refira ao protagonista como "você", "ele" ou "ela", nem pelo nome, ao narrar a ação, fala ou percepção dele/dela' + (protagName ? (' (nunca "' + protagName + ' faz", nunca "ela faz"/"ele faz" pra se referir a ' + protagName + ')') : '') + '; os outros personagens continuam normalmente em terceira pessoa (nome, "ele", "ela" — "ele diz", "ela sorri"), só o protagonista é sempre "eu".'
-      + (protagName ? (' A protagonista se chama ' + protagName + ', mas o nome dela e os pronomes "ela"/"ele" NUNCA aparecem como sujeito narrando a própria ação — troque sempre por "eu".') : '')
-      + ' Exemplo do jeito ERRADO: "Você entra na sala e vê o General." / "' + (protagName || 'Ela') + ' entra na sala." Exemplo CERTO: "Eu entro na sala e vejo o General."';
+
+    // POV: separa NARRAÇÃO (protagonista = "eu") de DIÁLOGO (outros personagens falam "você" com a protagonista).
+    const povLine = [
+      'PONTO DE VISTA (POV) — REGRA CRÍTICA, LEIA COM ATENÇÃO:',
+      '',
+      '1) A NARRAÇÃO é em PRIMEIRA PESSOA DO PRESENTE — o texto que descreve o que acontece é a voz do próprio protagonista narrando ("eu ando", "eu vejo", "eu paro"). O protagonista é SEMPRE "eu" NA NARRAÇÃO. Nunca use "você", "ele", "ela" nem o nome próprio pra se referir ao protagonista na narração.' + (protagName ? (' Nunca escreva "' + protagName + ' faz" nem "ela faz" — sempre "eu faço".') : ''),
+      '',
+      '2) O DIÁLOGO (falas dentro de aspas ou depois de travessão) segue regras NORMAIS. Quando OUTRO personagem fala DIRETAMENTE COM a protagonista, ele usa "você" (ou o nome dela), porque está falando com ela, não narrando sobre ela.' + (protagName ? (' Se o nome dela é ' + protagName + ', outro personagem pode dizer "' + protagName + ', venha aqui" ou "Você está bem?" — os dois estão certos.') : ''),
+      '',
+      '3) Outros personagens continuam em TERCEIRA PESSOA tanto na narração quanto no diálogo sobre eles ("ele diz", "ela sorri", "o General entra"). Só o protagonista é "eu" na narração.',
+      '',
+      'EXEMPLOS — PREste ATENÇÃO NA DIFERENÇA:',
+      'ERRADO (narração em 2ª pessoa): "Você entra na sala e vê o General."',
+      'CERTO  (narração em 1ª pessoa): "Eu entro na sala e vejo o General."',
+      '',
+      'ERRADO (outro personagem tratando a protagonista como 3ª pessoa): \'Ele pergunta: "Ela tem dezoito anos?"\' — errado porque ele está falando COM ela, não sobre ela.',
+      'CERTO  (outro personagem tratando a protagonista por "você"): \'Ele pergunta: "Você tem dezoito anos?"\'',
+      '',
+      'ERRADO (outro personagem narrando a protagonista): \'Ele olha pra ela e diz: "' + (protagName || 'ela') + ' está atrasada."\'',
+      'CERTO  (outro personagem falando direto com ela): \'Ele me olha e diz: "Você está atrasada."\'',
+      '',
+      'RESUMO:',
+      '- Narração: protagonista = "eu".',
+      '- Diálogo do outro personagem COM a protagonista = "você" (ou o nome dela).',
+      '- Diálogo/nação sobre outros personagens = terceira pessoa ("ele", "ela", nome).',
+      '- NUNCA use "você" pra narrar a ação do protagonista. NUNCA use "ela"/"ele" pra se referir à protagonista num diálogo dirigido a ela.'
+    ].join('\n');
+
     const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos ou ênfase — escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão.';
 
     const voiceBlock = (protagCard && (protagCard.narrativeVoice || protagCard.voiceExample)) ? [
@@ -2044,7 +2061,7 @@
         ? 'REGRA CRÍTICA DE SAÍDA: responda APENAS com a narração em prosa. NÃO escreva nada além da narração — sem blocos, sem marcadores, sem comentários. NUNCA copie ou parafraseie instruções do prompt.'
         : 'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa, e SÓ depois (no final absoluto) o bloco ===UPDATES===. NUNCA copie ou parafraseie instruções do prompt. Se você vir "[Lembrete: ...]", ignore.',
       updatesInstruction,
-      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu"), tempo presente, sem asteriscos. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
+      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu") NA NARRAÇÃO, tempo presente, sem asteriscos. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
     ].filter(Boolean).join('\n\n');
 
     const messages = [{role:'system', content: sys}];
@@ -2057,7 +2074,7 @@
       : '';
     const langReminder = buildLanguageReminder(s.memory);
     const updatesReminder = omitUpdatesInstruction ? '' : ' Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.';
-    const povReminder = '[Lembrete interno: continue em primeira pessoa ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' O protagonista nunca é "você", "ele" nem "ela".' + updatesReminder + ']';
+    const povReminder = '[Lembrete interno: continue a narração em PRIMEIRA PESSOA ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' Lembre: na NARRAÇÃO o protagonista é sempre "eu" (nunca "você"/"ela"/"ele"). Mas no DIÁLOGO, outros personagens falam DIRETO com a protagonista usando "você" — eles NÃO devem tratá-la em terceira pessoa quando falam com ela.' + updatesReminder + ']';
     if (opts.isContinue){
       messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
@@ -2082,24 +2099,34 @@
     return Math.max(1, base + reserve);
   }
 
-  // Retorna {endpoint, model, key} para o modo atual (colab ou openai)
+  // Normaliza endpoint: aceita ".../v1", ".../v1/chat/completions", ou a URL base.
+  // Sempre devolve uma URL terminando em /chat/completions.
+  function normalizeEndpoint(url){
+    let u = (url || '').trim().replace(/\/+$/, '');
+    if (!u) return '';
+    if (/\/chat\/completions$/i.test(u)) return u;
+    if (/\/v1$/i.test(u)) return u + '/chat/completions';
+    // Se termina com outra coisa (/api, etc.), assume que é base e adiciona o path completo.
+    if (/\/completions?$/i.test(u)) return u;
+    return u + '/v1/chat/completions';
+  }
+
   function getApiConfig(){
     const c = activeConnector();
     if (c.mode === 'colab'){
       return {
-        endpoint: c.colabEndpoint || '',
+        endpoint: normalizeEndpoint(c.colabEndpoint || ''),
         model: c.colabModel || 'local-model',
         key: c.colabKey || ''
       };
     }
     return {
-      endpoint: c.oaEndpoint || '',
+      endpoint: normalizeEndpoint(c.oaEndpoint || ''),
       model: c.oaModel || '',
       key: c.oaKey || ''
     };
   }
 
-  // Despacha pra API certa com base no modo atual.
   async function callApi(messages, opts){
     const conn = activeConnector();
     if (conn.mode === 'horde') return callAiHorde(messages, opts);
@@ -2132,7 +2159,7 @@
       res = await fetch(cfg.endpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
     }catch(err){
       recordDebug(c.mode || 'openai', reqBody, null, err.message);
-      throw new Error('Falha de rede ao chamar a API (' + err.message + '). Se estiver usando Colab, confira se o túnel ainda está ativo e se o link termina com /v1.');
+      throw new Error('Falha de rede ao chamar a API (' + err.message + '). Se estiver usando Colab, confira se o túnel ainda está ativo.');
     }
     if (res.status === 429 && attempt < 4){
       const t = await res.text().catch(()=> '');
@@ -2233,8 +2260,6 @@
     const conn = activeConnector();
     const characters = state.story.memory.characters || [];
 
-    // Two-phase faz sentido em Horde (queue) e Colab (local, rápido). Não em
-    // OpenAI-compatible genérico (custo por chamada).
     const useTwoPhase = (conn.mode === 'horde' || conn.mode === 'colab')
       && ((conn.updatesTokenBudget || 0) > 0)
       && characters.length > 0;
@@ -2245,7 +2270,6 @@
     let ragUsed = 0;
     let codeMap = {};
 
-    // Fase 1: narração
     const p = await buildPromptMessages(actionText, Object.assign({}, opts, {
       omitUpdatesInstruction: useTwoPhase
     }));
@@ -2256,7 +2280,6 @@
       maxTokens: Math.max(20, conn.maxLength || 250)
     });
 
-    // Fase 2: updates
     if (useTwoPhase && narrationResult.text){
       updateStatusOnly('Narração pronta — extraindo atualizações de ficha…', false);
       try{
@@ -2273,7 +2296,6 @@
         updatesError = e.message || String(e);
       }
     } else if (!useTwoPhase){
-      // Single-call: extrai updates do mesmo texto
       const parsed = extractUpdatesFromText(narrationResult.text, codeMap);
       narrationResult.text = parsed.cleaned;
       updates = parsed.updates || [];
@@ -2388,9 +2410,6 @@
     }
   }
 
-  // ========================================================================
-  // SNAPSHOT DE MEMÓRIA
-  // ========================================================================
   function snapshotMemoryDeep(){
     try{ return JSON.parse(JSON.stringify(state.story.memory)); }
     catch(e){ return null; }
@@ -2548,7 +2567,6 @@
     render();
   }
 
-  // ============ EXTRAÇÃO MULTI-TURNO (picker) ============
   function openExtractPicker(){
     const s = state.story;
     if (!s) return;
@@ -3860,7 +3878,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v49)</strong> — Colab nativo + fichas com reescrita completa
+          Versão: <strong>1.0-preview (v50)</strong> — POV refinado (narração ≠ diálogo) + endpoint normalizado
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3881,14 +3899,14 @@
             <label>Endpoint do Colab</label>
             <input type="text" id="colabEndpoint" value="${esc(c.colabEndpoint)}" placeholder="https://xxx.trycloudflare.com/v1">
             <div class="summ-note" style="font-size:11px; margin-top:5px;">
-              Cole o link do túnel + <code>/v1</code>. O link muda cada vez que reinicia o Colab.
+              Cole o link do túnel. Basta terminar com <code>/v1</code> — o app completa <code>/chat/completions</code> sozinho. O link muda a cada reinício do Colab.
             </div>
           </div>
           <div class="field">
             <label>Modelo</label>
             <input type="text" id="colabModel" value="${esc(c.colabModel || 'local-model')}" placeholder="local-model">
             <div class="summ-note" style="font-size:11px; margin-top:5px;">
-              Para llama-cpp-python o nome é ignorado — o servidor usa o modelo já carregado. Qualquer coisa serve.
+              llama-cpp-python ignora esse nome — usa o modelo carregado. Qualquer coisa serve.
             </div>
           </div>
           <div class="field">
@@ -4129,7 +4147,6 @@
     bind('#btnDiscardAllUpdates','click', discardAllPendingUpdates);
     bind('#btnDiscardAllUpdates2','click', discardAllPendingUpdates);
 
-    // Extract picker
     bind('#closeExtractPicker','click', closeExtractPicker);
     bind('#btnExtractCancel','click', closeExtractPicker);
     bind('#btnExtractGo','click', runMultiTurnExtraction);

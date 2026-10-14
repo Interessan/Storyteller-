@@ -507,6 +507,34 @@
     .card-modal h2{ font-size:19px; }
   }
 
+  .extract-list{ max-height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding-right:4px; }
+  .extract-item{
+    display:flex; gap:10px; padding:10px 12px;
+    background:var(--panel-2); border:1px solid var(--border);
+    border-radius:10px; cursor:pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .extract-item:hover{ background: rgba(255,255,255,0.05); }
+  .extract-item.checked{
+    background: rgba(239,236,228,0.07);
+    border-color: rgba(239,236,228,0.28);
+  }
+  .extract-item input[type=checkbox]{
+    margin-top:3px; flex-shrink:0; accent-color: var(--accent);
+  }
+  .extract-num{
+    font-family:'Inter',sans-serif; font-size:10.5px; color:var(--muted);
+    letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px;
+  }
+  .extract-action{
+    font-family:'Newsreader',serif; font-size:13px; color:var(--text-dim);
+    font-style:italic; margin-bottom:3px;
+  }
+  .extract-preview{
+    font-family:'Newsreader',serif; font-size:13px; color:var(--muted);
+    line-height:1.45;
+  }
+
   .vector-debug-panel{
     margin-top: 10px; padding: 12px; border-radius: 12px;
     background: rgba(239,236,228,0.05);
@@ -861,7 +889,8 @@
       vectorIndexing: 0,
       vectorDriveStatus: '',
       debugVector: { open: false, query: '', results: null, loading: false, error: null },
-      pendingUpdates: null
+      pendingUpdates: null,
+      extractPicker: { open: false, selectedIds: [], loading: false, error: null }
     }
   };
 
@@ -1435,11 +1464,9 @@
   async function init(){
     state.index = (await sGet('stories:index')) || [];
     state.connector = Object.assign(defaultConnector(), (await sGet('settings:connector')) || {});
-    // Migração: campo updatesTokenBudget introduzido na v46
     if (typeof state.connector.updatesTokenBudget !== 'number'){
       state.connector.updatesTokenBudget = 80;
     }
-    // Migração: Claude embutido foi removido. Quem tinha 'builtin' salvo volta pro Horde.
     if (state.connector.mode === 'builtin'){
       state.connector.mode = 'horde';
     }
@@ -1537,6 +1564,7 @@
     state.ui.expandedCard = null;
     state.ui.pendingSummary = null;
     state.ui.pendingUpdates = null;
+    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
     render();
     scrollFeedToBottom();
     if (window.indexedDB){
@@ -1752,14 +1780,33 @@
     ].join('\n');
   }
 
-  // Prompt enxuto só pra extrair updates, usado na fase 2 (Horde).
-  function buildUpdatesOnlyMessages(narrationText, characters){
+  // Prompt enxuto só pra extrair updates. Aceita:
+  //   - string (um texto de narração só)
+  //   - um turn {text, sourceAction?}
+  //   - um array de turns [{text, sourceAction?}, ...] em ordem cronológica
+  function buildUpdatesOnlyMessages(input, characters){
+    let turns;
+    if (typeof input === 'string'){
+      turns = [{ text: input, sourceAction: '' }];
+    } else if (Array.isArray(input)){
+      turns = input;
+    } else if (input && typeof input === 'object'){
+      turns = [input];
+    } else {
+      turns = [{ text: '', sourceAction: '' }];
+    }
+
     const codes = characters.map((c, i) => {
       const code = 'c' + String(i + 1).padStart(3, '0');
       return '[' + code + '] ' + (c.name || 'Sem nome');
     }).join('\n');
+
+    const isMulti = turns.length > 1;
     const sys = [
-      'Você é um assistente que analisa uma narração de RPG já escrita e identifica mudanças de estado dos personagens que aconteceram NAQUELA cena.',
+      'Você é um assistente que analisa narrações de RPG já escritas e identifica mudanças de estado dos personagens que aconteceram NAQUELAS cenas.',
+      isMulti
+        ? 'Você vai receber VÁRIOS turnos em ordem cronológica. Analise TODOS e produza o estado FINAL consolidado (se um campo mudou várias vezes, use o VALOR MAIS RECENTE).'
+        : '',
       '',
       'FORMATO OBRIGATÓRIO: sua resposta INTEIRA deve ser um bloco começando com a linha exata "===UPDATES===" e terminando com a linha exata "===END UPDATES===".',
       'Se nada mudou, responda apenas as duas linhas vazias (===UPDATES=== seguido de ===END UPDATES===).',
@@ -1771,22 +1818,45 @@
       'Campos válidos: relationship | knows | wants | status',
       '',
       'REGRAS:',
-      '- Só inclua mudanças REAIS que aconteceram na cena. NÃO invente.',
+      '- Só inclua mudanças REAIS que aconteceram nas cenas. NÃO invente.',
       '- Só inclua personagens que participaram ou foram diretamente afetados.',
       '- Se um campo NÃO mudou, NÃO inclua aquela linha.',
       '- Use APENAS os códigos abaixo, no formato [cXXX].',
       '',
       'Personagens disponíveis com códigos:',
       codes
-    ].join('\n');
-    const userMsg = [
-      'NARRAÇÃO PARA ANALISAR:',
-      '',
-      narrationText,
-      '',
-      '---',
-      'Agora escreva o bloco ===UPDATES=== (ou vazio, se nada mudou). Comece a resposta exatamente com "===UPDATES===".'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
+
+    let userMsg;
+    if (isMulti){
+      const blocks = turns.map((t, i) => {
+        const lines = ['TURNO #' + (i + 1)];
+        if (t.sourceAction) lines.push('AÇÃO DO JOGADOR: ' + t.sourceAction);
+        lines.push('NARRAÇÃO: ' + (t.text || ''));
+        return lines.join('\n');
+      }).join('\n\n---\n\n');
+      userMsg = [
+        'TURNOS PARA ANALISAR (em ordem cronológica):',
+        '',
+        blocks,
+        '',
+        '---',
+        'Agora escreva o bloco ===UPDATES=== considerando TODOS os turnos acima. Se um campo mudou várias vezes, use o valor MAIS RECENTE. Comece a resposta exatamente com "===UPDATES===".'
+      ].join('\n');
+    } else {
+      const t = turns[0];
+      userMsg = [
+        t.sourceAction ? ('AÇÃO DO JOGADOR: ' + t.sourceAction) : '',
+        t.sourceAction ? '' : '',
+        'NARRAÇÃO PARA ANALISAR:',
+        '',
+        t.text || '',
+        '',
+        '---',
+        'Agora escreva o bloco ===UPDATES=== (ou vazio, se nada mudou). Comece a resposta exatamente com "===UPDATES===".'
+      ].filter(l => l !== '').join('\n');
+    }
+
     return [
       {role:'system', content: sys},
       {role:'user', content: userMsg}
@@ -1905,7 +1975,6 @@
       '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem.'
     ].filter(Boolean).join('\n') : '';
 
-    // Se estamos no modo two-phase (Horde), não incluímos instruções de updates no prompt de narração.
     const omitUpdatesInstruction = !!opts.omitUpdatesInstruction;
     const updatesInstruction = omitUpdatesInstruction ? '' : buildUpdatesInstruction(s.memory.characters || []);
     const codeMap = buildCardCodeMap(s.memory.characters || []);
@@ -2101,7 +2170,6 @@
     const conn = activeConnector();
     const characters = state.story.memory.characters || [];
 
-    // Two-phase só faz sentido no Horde (completion API) e se o usuário quer updates.
     const useTwoPhase = (conn.mode === 'horde')
       && ((conn.updatesTokenBudget || 0) > 0)
       && characters.length > 0;
@@ -2112,7 +2180,6 @@
     let ragUsed = 0;
     let codeMap = {};
 
-    // ---- Fase 1: narração ----
     const p = await buildPromptMessages(actionText, Object.assign({}, opts, {
       omitUpdatesInstruction: useTwoPhase
     }));
@@ -2124,7 +2191,6 @@
         maxTokens: Math.max(20, conn.maxLength || 250)
       });
     } else {
-      // OpenAI-compatible: single call, chat models respeitam a estrutura
       const singleResult = await callOpenAICompatible(p.messages);
       const parsed = extractUpdatesFromText(singleResult.text, codeMap);
       singleResult.text = parsed.cleaned;
@@ -2132,7 +2198,6 @@
       narrationResult = singleResult;
     }
 
-    // ---- Fase 2: updates (só no Horde two-phase) ----
     if (useTwoPhase && narrationResult.text){
       updateStatusOnly('Narração pronta — extraindo atualizações de ficha…', false);
       try{
@@ -2169,6 +2234,44 @@
       if (narrationResult.kudos) state.story.stats.totalKudos += narrationResult.kudos;
     }
     return narrationResult;
+  }
+
+  // Corta o texto num ponto "seguro": prefere quebra de parágrafo,
+  // depois fim de frase (evitando abreviações tipo "Sr."), depois espaço.
+  function trimToLastSentence(text){
+    if (!text) return text;
+    const trimmed = text.trim();
+    if (!trimmed) return trimmed;
+
+    // Já termina bem? Devolve como está.
+    if (/[.!?…]["')\]]?\s*$/.test(trimmed)) return trimmed;
+
+    // Prefere quebra de parágrafo na segunda metade do texto.
+    const paraIdx = trimmed.lastIndexOf('\n\n');
+    if (paraIdx > 30 && paraIdx > trimmed.length * 0.4){
+      const cut = trimmed.slice(0, paraIdx).trim();
+      if (cut) return cut;
+    }
+
+    // Fim de frase: [.!?…] seguido de (aspas/parênteses opcionais) + espaço + letra maiúscula ou fim de string.
+    // Isso evita cortar em "Sr.", "etc.", "p.ex." etc.
+    const re = /[.!?…](["')\]]?)(\s+[A-ZÀ-Ú"'\-—(]|$)/g;
+    let lastGood = -1;
+    let m;
+    while ((m = re.exec(trimmed)) !== null){
+      lastGood = m.index + 1 + (m[1] ? m[1].length : 0);
+    }
+    if (lastGood > 20){
+      const cut = trimmed.slice(0, lastGood).trim();
+      if (cut) return cut;
+    }
+
+    // Fallback: último espaço.
+    const lastSpace = trimmed.lastIndexOf(' ');
+    if (lastSpace > 20){
+      return trimmed.slice(0, lastSpace).trim();
+    }
+    return trimmed;
   }
 
   function cleanNarrationText(text, cutOff){
@@ -2209,20 +2312,7 @@
     }
 
     if (cutOff){
-      const enders = ['.', '!', '?', '…', '."', '!"', '?"', '.”', '!”', '?"'];
-      let bestCut = -1;
-      enders.forEach(e => {
-        const idx = t.lastIndexOf(e);
-        if (idx > bestCut) bestCut = idx + e.length;
-      });
-      if (bestCut > 20 && bestCut < t.length){
-        t = t.slice(0, bestCut).trim();
-      } else {
-        const lastSpace = t.lastIndexOf(' ');
-        if (lastSpace > t.length - 30 && lastSpace > 20){
-          t = t.slice(0, lastSpace).trim();
-        }
-      }
+      t = trimToLastSentence(t);
     }
     return t;
   }
@@ -2319,18 +2409,19 @@
     status: 'Status'
   };
 
+  // Adiciona updates pendentes. Se já existir um pendente com o mesmo cardId+campo,
+  // o NOVO substitui (o mais recente vence).
   function addPendingUpdates(rawUpdates){
     if (!rawUpdates || !rawUpdates.length) return;
     const s = state.story;
     if (!s) return;
     if (!state.ui.pendingUpdates) state.ui.pendingUpdates = { items: [] };
-    const existingCardIds = new Set(state.ui.pendingUpdates.items.map(it => it.cardId + '|' + it.field));
     rawUpdates.forEach(u => {
       const card = (s.memory.characters || []).find(c => c.id === u.cardId);
       if (!card) return;
       const key = u.cardId + '|' + u.field;
-      if (existingCardIds.has(key)) return;
-      existingCardIds.add(key);
+      // Remove pendente antigo com o mesmo card+campo
+      state.ui.pendingUpdates.items = state.ui.pendingUpdates.items.filter(it => (it.cardId + '|' + it.field) !== key);
       let oldValue = '';
       if (u.field === 'status') oldValue = card.status || 'vivo';
       else if (typeof card[u.field] === 'string') oldValue = card[u.field];
@@ -2404,41 +2495,100 @@
     render();
   }
 
-  async function extractUpdatesFromLastTurn(){
-    if (state.ui.generating) return;
-    const t = lastAiTurn();
-    if (!t || !t.text){
-      updateStatus('Não há um turno recente pra analisar.', true);
-      return;
-    }
+  // ============ EXTRAÇÃO MULTI-TURNO (picker) ============
+  function openExtractPicker(){
     const s = state.story;
-    if (!s.memory.characters || !s.memory.characters.length){
-      updateStatus('Nenhum personagem cadastrado pra atualizar.', true);
+    if (!s) return;
+    const aiTurns = s.turns.filter(t => t.type === 'ai');
+    if (!aiTurns.length){
+      updateStatus('Não há narrações para analisar ainda.', true);
       return;
     }
-    state.ui.generating = true;
-    updateStatus('Extraindo atualizações do último turno…', false);
+    if (!(s.memory.characters || []).length){
+      updateStatus('Cadastre pelo menos um personagem antes de extrair atualizações.', true);
+      return;
+    }
+    // Padrão: últimos 3 turnos de IA selecionados
+    const defaultSelected = aiTurns.slice(-3).map(t => t.id);
+    state.ui.extractPicker = {
+      open: true,
+      selectedIds: defaultSelected,
+      loading: false,
+      error: null
+    };
     render();
+  }
+
+  function closeExtractPicker(){
+    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
+    render();
+  }
+
+  function toggleExtractSelection(turnId){
+    const ep = state.ui.extractPicker;
+    if (!ep || ep.loading) return;
+    const idx = ep.selectedIds.indexOf(turnId);
+    if (idx >= 0) ep.selectedIds.splice(idx, 1);
+    else ep.selectedIds.push(turnId);
+    render();
+  }
+
+  async function runMultiTurnExtraction(){
+    const ep = state.ui.extractPicker;
+    if (!ep || !ep.selectedIds.length || ep.loading) return;
+    const s = state.story;
+    // Ordem cronológica (índice do turno no array principal)
+    const selected = s.turns
+      .map((t, i) => ({ t, i }))
+      .filter(x => ep.selectedIds.includes(x.t.id))
+      .sort((a, b) => a.i - b.i)
+      .map(x => x.t);
+    if (!selected.length){
+      ep.error = 'Nenhum turno válido selecionado.';
+      render();
+      return;
+    }
+    if (!(s.memory.characters || []).length){
+      ep.error = 'Nenhum personagem cadastrado pra atualizar.';
+      render();
+      return;
+    }
+
+    ep.loading = true;
+    ep.error = null;
+    render();
+
     try{
       const codeMap = buildCardCodeMap(s.memory.characters);
-      const messages = buildUpdatesOnlyMessages(t.text, s.memory.characters);
+      const messages = buildUpdatesOnlyMessages(selected, s.memory.characters);
       const conn = activeConnector();
+      const totalText = selected.reduce((sum, t) => sum + (t.text || '').length, 0);
+      const estTokens = Math.ceil(totalText / 3.2);
+      const opts = {
+        maxTokens: Math.max(200, Math.min(800, estTokens + 150)),
+        temperature: 0.2,
+        queueMsg: 'Analisando ' + selected.length + ' turno' + (selected.length > 1 ? 's' : '') + '…'
+      };
       let result;
-      const opts = {maxTokens: 500, temperature: 0.2};
       if (conn.mode === 'horde') result = await callAiHorde(messages, opts);
       else result = await callOpenAICompatible(messages, opts);
       const {updates} = extractUpdatesFromText(result.text, codeMap);
+
       if (updates.length){
         addPendingUpdates(updates);
-        updateStatus(updates.length + ' atualização' + (updates.length > 1 ? 'ões' : '') + ' extraída' + (updates.length > 1 ? 's' : '') + '.', false);
+        state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
+        updateStatus(updates.length + ' atualizaç' + (updates.length > 1 ? 'ões' : 'ão') + ' sugerida' + (updates.length > 1 ? 's' : '') + ' a partir de ' + selected.length + ' turno' + (selected.length > 1 ? 's' : '') + '.', false);
+        render();
       } else {
-        updateStatus('Nenhuma mudança de estado encontrada neste turno.', false);
+        ep.loading = false;
+        ep.error = 'Nenhuma mudança de estado encontrada nos turnos selecionados.';
+        render();
       }
     }catch(err){
-      updateStatus('Erro ao extrair: ' + err.message, true);
+      ep.loading = false;
+      ep.error = err.message || String(err);
+      render();
     }
-    state.ui.generating = false;
-    render();
   }
 
   // Constrói a nota de status após gerar, incluindo contagem de updates e erros.
@@ -2910,6 +3060,7 @@
     state.ui.expandedCard = null;
     state.ui.pendingSummary = null;
     state.ui.pendingUpdates = null;
+    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
     await sSet('story:' + s.id, s);
     await sSet('stories:index', state.index);
     await sSet('settings:lastOpen', s.id);
@@ -2975,6 +3126,7 @@
         state.ui.expandedCard = null;
         state.ui.pendingSummary = null;
         state.ui.pendingUpdates = null;
+        state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
         await sSet('story:' + s.id, s);
         await sSet('stories:index', state.index);
         await sSet('settings:lastOpen', s.id);
@@ -3019,6 +3171,67 @@
         <div class="updates-foot">
           <button class="primary" id="btnApplyAllUpdates">✓ Aplicar tudo</button>
           <button id="btnDiscardAllUpdates2">✕ Descartar tudo</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderExtractPicker(){
+    const ep = state.ui.extractPicker;
+    if (!ep || !ep.open) return '';
+    const s = state.story;
+    const aiTurns = s.turns.filter(t => t.type === 'ai');
+    // Mais recentes no topo
+    const items = aiTurns.slice().reverse();
+
+    const selectedTurns = s.turns.filter(t => ep.selectedIds.includes(t.id));
+    const totalChars = selectedTurns.reduce((sum, t) => sum + (t.text || '').length + (t.sourceAction || '').length, 0);
+    const totalTokens = Math.ceil(totalChars / 3.2);
+
+    return `
+      <div class="card-modal-overlay" id="extractPickerOverlay">
+        <div class="card-modal" style="max-width:600px;">
+          <div class="card-modal-wrap">
+            <button class="close icon ghost" id="closeExtractPicker" title="fechar">✕</button>
+            <h2 style="margin-bottom:4px;">🧠 Extrair atualizações</h2>
+            <div class="sub">Escolha quais trechos a IA deve analisar</div>
+
+            <div class="helpbox" style="margin-bottom:12px; font-size:12px;">
+              A IA vai ler os trechos em ordem cronológica e identificar mudanças de estado (relação, o que sabe, o que quer, status).<br>
+              <span style="opacity:.85;">Se um mesmo campo mudar várias vezes, o <strong>valor mais recente</strong> vence.</span>
+            </div>
+
+            <div class="extract-list">
+              ${items.map(t => {
+                const turnIndex = s.turns.indexOf(t) + 1;
+                const checked = ep.selectedIds.includes(t.id);
+                const actionText = t.sourceAction || '(continuação)';
+                const previewText = (t.text || '').replace(/\s+/g, ' ').slice(0, 100);
+                return `
+                  <label class="extract-item ${checked ? 'checked' : ''}">
+                    <input type="checkbox" data-extract-id="${t.id}" ${checked ? 'checked' : ''} ${ep.loading ? 'disabled' : ''}>
+                    <div style="flex:1; min-width:0;">
+                      <div class="extract-num">Trecho #${turnIndex}</div>
+                      <div class="extract-action">"${esc(actionText.slice(0, 110))}${actionText.length > 110 ? '…' : ''}"</div>
+                      <div class="extract-preview">${esc(previewText)}${(t.text || '').length > 100 ? '…' : ''}</div>
+                    </div>
+                  </label>
+                `;
+              }).join('')}
+            </div>
+
+            ${ep.error ? `<div class="summ-note err" style="margin-top:10px;">⚠ ${esc(ep.error)}</div>` : ''}
+
+            <div style="display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-soft); flex-wrap:wrap;">
+              <span class="mono" style="font-size:11px; color:var(--muted); flex:1; min-width:120px;">
+                ${ep.selectedIds.length} trecho${ep.selectedIds.length !== 1 ? 's' : ''} · ≈ ${totalTokens} tokens
+              </span>
+              <button id="btnExtractCancel" ${ep.loading ? 'disabled' : ''}>cancelar</button>
+              <button class="primary" id="btnExtractGo" ${ep.selectedIds.length === 0 || ep.loading ? 'disabled' : ''}>
+                ${ep.loading ? 'analisando…' : 'analisar ' + ep.selectedIds.length + ' trecho' + (ep.selectedIds.length !== 1 ? 's' : '')}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -3132,7 +3345,7 @@
                 </div>
               </div>
               <div class="dungeon-bar dungeon-bar-secondary">
-                <button id="btnExtractUpdates" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Pede à IA pra extrair mudanças de estado do último turno">🧠 extrair</button>
+                <button id="btnExtractUpdates" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Pede à IA pra extrair mudanças de estado (com seleção de turnos)">🧠 extrair</button>
                 <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer">↩ Desfazer</button>
                 <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
                 <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
@@ -3156,6 +3369,7 @@
       ${state.ui.modal === 'settings' ? renderSettingsModal() : ''}
       ${state.ui.modal === 'stories' ? renderStoriesModal() : ''}
       ${state.ui.expandedCard ? renderCardEditorModal() : ''}
+      ${state.ui.extractPicker && state.ui.extractPicker.open ? renderExtractPicker() : ''}
     `;
 
     bindEvents();
@@ -3589,7 +3803,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v47)</strong> — updates em chamada separada (AI Horde)
+          Versão: <strong>1.0-preview (v48)</strong> — extração multi-turno + trim inteligente
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3627,7 +3841,7 @@
               : (c.mode === 'horde'
                   ? (updReserve > 0
                       ? '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.'
-                      : 'Zero = sem updates automáticos. Você pode extrair manualmente com 🧠 extrair.')
+                      : 'Zero = sem updates automáticos. Use 🧠 extrair quando quiser.')
                   : 'Chat model: reserva somada à narração. Se a narração estourar, os updates são cortados.')}
             <br><strong>Total: ${c.mode === 'horde' && willUseTwoPhase
               ? ((c.maxLength || 250) + ' (narração) + ' + updReserve + ' (updates)')
@@ -3823,7 +4037,7 @@
     bind('#btnSend','click', sendAction);
     bind('#btnContinue','click', continueStory);
     bind('#btnRetry','click', () => retryLast());
-    bind('#btnExtractUpdates','click', extractUpdatesFromLastTurn);
+    bind('#btnExtractUpdates','click', openExtractPicker);
     bind('#btnUndo','click', undoLast);
     bind('#btnRedo','click', redoLast);
     bind('#btnErase','click', eraseLast);
@@ -3845,6 +4059,29 @@
     bind('#btnApplyAllUpdates','click', applyAllPendingUpdates);
     bind('#btnDiscardAllUpdates','click', discardAllPendingUpdates);
     bind('#btnDiscardAllUpdates2','click', discardAllPendingUpdates);
+
+    // Extract picker
+    bind('#closeExtractPicker','click', closeExtractPicker);
+    bind('#btnExtractCancel','click', closeExtractPicker);
+    bind('#btnExtractGo','click', runMultiTurnExtraction);
+    const extractOverlay = $('#extractPickerOverlay');
+    if (extractOverlay) extractOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'extractPickerOverlay') closeExtractPicker();
+    });
+    $$('[data-extract-id]').forEach(chk => chk.addEventListener('change', (e) => {
+      // Toggle selection without re-render fighting the checkbox: we re-render anyway,
+      // but preserve the state via state.ui.extractPicker.selectedIds.
+      e.stopPropagation();
+      toggleExtractSelection(e.target.dataset.extractId);
+    }));
+    // Previne que o clique no label (que dispara o toggle do checkbox) também conte duas vezes
+    $$('.extract-item').forEach(el => el.addEventListener('click', (e) => {
+      // Se o clique foi direto no checkbox, deixa o handler dele cuidar
+      if (e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      const chk = el.querySelector('[data-extract-id]');
+      if (chk) toggleExtractSelection(chk.dataset.extractId);
+    }));
 
     $$('.spine .tab').forEach(t => t.onclick = () => rewindTo(t.dataset.jump));
     $$('[data-turntap]').forEach(el => el.addEventListener('click', (e) => {

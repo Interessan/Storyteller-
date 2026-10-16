@@ -30,6 +30,7 @@
     --accent-ink: #0e0e10;
     --danger: #c96a5c;
     --shadow: rgba(0,0,0,0.55);
+    --scenario-accent: #d4a960;
   }
   *{box-sizing:border-box;}
   body,html{margin:0;padding:0; overflow-x:hidden; height:100%;}
@@ -88,6 +89,8 @@
   button.ghost:hover{ background:rgba(255,255,255,0.07); }
   button:disabled{ opacity:.4; cursor:default; }
   button.icon{ padding:9px 12px; border-radius:999px; }
+  button.scenario-btn{ color: var(--scenario-accent); border-color: rgba(212,169,96,0.35); background: rgba(212,169,96,0.08); }
+  button.scenario-btn:hover{ background: rgba(212,169,96,0.15); border-color: rgba(212,169,96,0.5); }
 
   .layout{
     display:grid;
@@ -129,12 +132,35 @@
     box-shadow: 20px 0 60px var(--shadow);
   }
   .memory-panel.open{ transform:translateX(0); }
+  .memory-panel.scenario-mode{
+    border-right-color: rgba(212,169,96,0.35);
+  }
   .memory-panel-close{ align-self:flex-end; }
   .memory-panel h2{
     font-family:'Newsreader', serif; font-weight:500; font-size:17px; color:var(--text);
     margin:0 0 6px; display:flex; align-items:center; gap:7px; user-select:none;
     border-bottom:1px solid var(--border-soft); padding-bottom:8px;
   }
+
+  .scenario-banner{
+    background: linear-gradient(90deg, rgba(212,169,96,0.18), rgba(212,169,96,0.08));
+    border: 1px solid rgba(212,169,96,0.4);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin: 0 0 6px;
+  }
+  .scenario-banner .sb-label{
+    font-family:'Inter', sans-serif; font-size:10px; color: var(--scenario-accent);
+    letter-spacing:.08em; text-transform:uppercase; margin-bottom:4px; font-weight:600;
+  }
+  .scenario-banner .sb-title{
+    font-family:'Newsreader', serif; font-size:15px; color:var(--text); margin-bottom:2px;
+  }
+  .scenario-banner .sb-desc{
+    font-family:'Inter', sans-serif; font-size:11px; color:var(--muted); line-height:1.4;
+  }
+  .scenario-banner .sb-actions{ display:flex; gap:6px; margin-top:8px; }
+  .scenario-banner .sb-actions button{ font-size:11px; padding:6px 11px; }
 
   .mem-tabs{
     display:flex; gap:4px; padding-bottom:10px; margin-bottom:2px;
@@ -151,6 +177,9 @@
   .mem-tab.active{
     background:rgba(255,255,255,0.12); border-color:var(--border); color:var(--text);
   }
+  .memory-panel.scenario-mode .mem-tab.active{
+    background: rgba(212,169,96,0.16); border-color: rgba(212,169,96,0.35); color: var(--text);
+  }
 
   .field label{
     display:block; font-family:'Inter', system-ui, sans-serif; font-size:11.5px; color:var(--muted);
@@ -162,6 +191,10 @@
   }
   .field textarea{ min-height:110px; }
   .field textarea:focus, .field input:focus{ outline:none; border-color: rgba(255,255,255,0.28); }
+  .memory-panel.scenario-mode .field textarea:focus,
+  .memory-panel.scenario-mode .field input:focus{
+    border-color: rgba(212,169,96,0.5);
+  }
   .field{ margin-bottom:12px; }
   .summ-note{ font-family:'Inter', sans-serif; font-size:12px; color:var(--muted); line-height:1.5; }
   .nudge-banner{
@@ -170,6 +203,23 @@
   }
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
+
+  /* Abertura (opening) em destaque no modo cenário */
+  .memory-panel.scenario-mode #scenarioOpening {
+    min-height: 150px;
+    border-color: rgba(212,169,96,0.35);
+    background: rgba(212,169,96,0.04);
+  }
+  .memory-panel.scenario-mode #scenarioOpening:focus {
+    border-color: rgba(212,169,96,0.7);
+    background: rgba(212,169,96,0.07);
+  }
+  .opening-label-wrap{
+    display:flex; align-items:center; gap:6px; margin-bottom:6px;
+  }
+  .opening-label-wrap .opening-icon{
+    font-size: 13px;
+  }
 
   .lang-options{ display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
   .lang-option{
@@ -180,6 +230,9 @@
   }
   .lang-option:hover{ background:rgba(255,255,255,0.06); }
   .lang-option.selected{ background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.25); }
+  .memory-panel.scenario-mode .lang-option.selected{
+    background: rgba(212,169,96,0.12); border-color: rgba(212,169,96,0.35);
+  }
   .lang-option input[type=radio]{ margin:2px 0 0; accent-color: var(--accent); flex-shrink:0; }
   .lang-option .lo-body{ flex:1; min-width:0; }
   .lang-option .lo-title{ font-family:'Inter', sans-serif; font-size:13px; color:var(--text); margin-bottom:2px; font-weight:500; }
@@ -415,13 +468,43 @@
   .modal h2{ font-family:'Newsreader', serif; font-weight:500; font-size:21px; margin-top:0; color:var(--text); }
   .modal .close{ float:right; }
   .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  .modal-tabs{
+    display:flex; gap:4px; padding-bottom:12px; margin-bottom:12px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .modal-tab{
+    padding:8px 14px; font-size:12.5px;
+    background:transparent; border:1px solid transparent; border-radius:10px;
+    cursor:pointer; color:var(--muted);
+    transition: background .15s, color .15s, border-color .15s;
+    font-family:'Inter', sans-serif; font-weight:500;
+  }
+  .modal-tab:hover{ background:rgba(255,255,255,0.06); color:var(--text); }
+  .modal-tab.active{
+    background:rgba(255,255,255,0.12); border-color:var(--border); color:var(--text);
+  }
+  .modal-tab.scenarios-tab.active{
+    background: rgba(212,169,96,0.16); border-color: rgba(212,169,96,0.35);
+  }
+
   .story-item{
     display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--border);
     border-radius:12px; margin-bottom:8px; background:var(--panel-2);
   }
+  .story-item.scenario-item{
+    border-color: rgba(212,169,96,0.25);
+    background: rgba(212,169,96,0.04);
+  }
   .story-item .info{ flex:1; min-width:0; }
   .story-item .info .t{ font-family:'Newsreader', serif; font-size:15.5px; color:var(--text); }
   .story-item .info .d{ font-family:'Inter', sans-serif; font-size:10.5px; color:var(--muted); }
+  .story-item .scenario-chip{
+    display:inline-block; padding:2px 7px; border-radius:999px; font-family:'Inter', sans-serif;
+    font-size:10px; color: var(--scenario-accent); background: rgba(212,169,96,0.12);
+    border: 1px solid rgba(212,169,96,0.3); margin-left: 6px;
+  }
+
   .helpbox{ font-family:'Inter', sans-serif; font-size:12.5px; color:var(--muted); line-height:1.6; background:var(--panel-2); border-radius:10px; padding:11px 13px; margin-top:6px; }
   select{
     width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
@@ -853,6 +936,8 @@
   let state = {
     index: [],
     story: null,
+    scenarioIndex: [],
+    scenario: null,
     connector: null,
     drive: {
       clientId: loadSavedClientId(),
@@ -890,7 +975,10 @@
       vectorDriveStatus: '',
       debugVector: { open: false, query: '', results: null, loading: false, error: null },
       pendingUpdates: null,
-      extractPicker: { open: false, selectedIds: [], loading: false, error: null }
+      extractPicker: { open: false, selectedIds: [], loading: false, error: null },
+      scenarioEditorOpen: false,
+      storiesTab: 'stories',
+      newAdventureModal: null
     }
   };
 
@@ -933,28 +1021,53 @@
     return selected;
   }
 
+  // ============ MEMÓRIA PADRÃO + CENÁRIO ============
+  function blankMemory(){
+    return {
+      persona: '',
+      world: '',
+      authorNote: '',
+      summary: '',
+      language: 'pt-BR',
+      languageCustom: '',
+      characters: [],
+      locations: [],
+      groups: [],
+      secrets: ''
+    };
+  }
+
   function newStory(title){
     return {
       id: uid(),
       title: title || 'Nova aventura',
       pov: 'first',
-      memory: {
-        persona: '',
-        world: '',
-        authorNote: '',
-        summary: '',
-        language: 'pt-BR',
-        languageCustom: '',
-        characters: [],
-        locations: [],
-        groups: [],
-        secrets: ''
-      },
+      memory: blankMemory(),
       turns: [],
       connector: null,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
+  }
+
+  function newScenario(title){
+    return {
+      id: uid(),
+      title: title || 'Novo cenário',
+      opening: '',
+      memory: blankMemory(),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+  }
+
+  function currentMemory(){
+    if (state.ui.scenarioEditorOpen && state.scenario) return state.scenario.memory;
+    return state.story ? state.story.memory : null;
+  }
+
+  function isScenarioMode(){
+    return state.ui.scenarioEditorOpen && !!state.scenario;
   }
 
   // ========================================================================
@@ -1466,6 +1579,7 @@
 
   async function init(){
     state.index = (await sGet('stories:index')) || [];
+    state.scenarioIndex = (await sGet('scenarios:index')) || [];
     state.connector = Object.assign(defaultConnector(), (await sGet('settings:connector')) || {});
     if (typeof state.connector.updatesTokenBudget !== 'number'){
       state.connector.updatesTokenBudget = 80;
@@ -1494,29 +1608,23 @@
     scrollFeedToBottom();
   }
 
-  function normalizeStory(s){
-    if (!s.memory) s.memory = {};
-    if (!s.memory.characters) s.memory.characters = [];
-    if (!s.memory.locations) s.memory.locations = [];
-    if (!s.memory.groups) s.memory.groups = [];
-    if (typeof s.memory.secrets !== 'string') s.memory.secrets = '';
-    if (typeof s.memory.persona !== 'string') s.memory.persona = '';
-    if (typeof s.memory.world !== 'string') s.memory.world = '';
-    if (typeof s.memory.authorNote !== 'string') s.memory.authorNote = '';
-    if (typeof s.memory.summary !== 'string') s.memory.summary = '';
-    if (typeof s.memory.language !== 'string') s.memory.language = 'pt-BR';
-    if (typeof s.memory.languageCustom !== 'string') s.memory.languageCustom = '';
-    if (!s.memory.chapters) s.memory.chapters = [];
-    if (!s.migratedChapters){
-      if (s.memory.summary && !s.memory.chapters.length){
-        s.memory.chapters.push({ id: uid(), title: 'Capítulo 1', text: s.memory.summary, archivedTurnIds: [] });
-      }
-      s.migratedChapters = true;
-    }
-    s.memory.chapters.forEach(ch => {
+  function normalizeMemory(m){
+    if (!m) m = blankMemory();
+    if (!m.characters) m.characters = [];
+    if (!m.locations) m.locations = [];
+    if (!m.groups) m.groups = [];
+    if (typeof m.secrets !== 'string') m.secrets = '';
+    if (typeof m.persona !== 'string') m.persona = '';
+    if (typeof m.world !== 'string') m.world = '';
+    if (typeof m.authorNote !== 'string') m.authorNote = '';
+    if (typeof m.summary !== 'string') m.summary = '';
+    if (typeof m.language !== 'string') m.language = 'pt-BR';
+    if (typeof m.languageCustom !== 'string') m.languageCustom = '';
+    if (!m.chapters) m.chapters = [];
+    m.chapters.forEach(ch => {
       if (!Array.isArray(ch.archivedTurnIds)) ch.archivedTurnIds = [];
     });
-    s.memory.characters.forEach(c => {
+    m.characters.forEach(c => {
       if (typeof c.age !== 'string') c.age = '';
       if (typeof c.appearance !== 'string') c.appearance = '';
       if (typeof c.personality !== 'string') c.personality = '';
@@ -1534,19 +1642,30 @@
       if (typeof c.status !== 'string') c.status = 'vivo';
       if (typeof c.lastSeenTurn !== 'number') c.lastSeenTurn = -1;
     });
-    s.memory.locations.forEach(l => {
+    m.locations.forEach(l => {
       if (typeof l.origin !== 'string') l.origin = '';
       if (typeof l.desc !== 'string') l.desc = '';
       if (typeof l.notes !== 'string') l.notes = '';
       if (typeof l.alwaysOn !== 'boolean') l.alwaysOn = true;
       if (typeof l.keywords !== 'string') l.keywords = '';
     });
-    s.memory.groups.forEach(g => {
+    m.groups.forEach(g => {
       if (typeof g.members !== 'string') g.members = '';
       if (typeof g.dynamic !== 'string') g.dynamic = '';
       if (typeof g.alwaysOn !== 'boolean') g.alwaysOn = true;
       if (typeof g.keywords !== 'string') g.keywords = '';
     });
+    return m;
+  }
+
+  function normalizeStory(s){
+    s.memory = normalizeMemory(s.memory);
+    if (!s.migratedChapters){
+      if (s.memory.summary && !s.memory.chapters.length){
+        s.memory.chapters.push({ id: uid(), title: 'Capítulo 1', text: s.memory.summary, archivedTurnIds: [] });
+      }
+      s.migratedChapters = true;
+    }
     if (!s.migratedPersona && s.memory.persona && !s.memory.characters.some(c => c.isProtagonist)){
       s.memory.characters.unshift({
         id: uid(), name:'Protagonista', age:'', appearance:'', personality:'',
@@ -1555,6 +1674,14 @@
     }
     s.migratedPersona = true;
     return s;
+  }
+
+  function normalizeScenario(sc){
+    sc.memory = normalizeMemory(sc.memory);
+    if (typeof sc.opening !== 'string') sc.opening = '';
+    if (!sc.createdAt) sc.createdAt = Date.now();
+    if (!sc.updatedAt) sc.updatedAt = sc.createdAt;
+    return sc;
   }
 
   function scrollFeedToBottom(){
@@ -1581,8 +1708,26 @@
   }
 
   let saveTimer = null;
+  let scenarioSaveTimer = null;
   let saveIndicatorTimer = null;
+
+  function scheduleScenarioSave(){
+    if (!state.scenario) return;
+    state.scenario.updatedAt = Date.now();
+    clearTimeout(scenarioSaveTimer);
+    scenarioSaveTimer = setTimeout(async () => {
+      await sSet('scenario:' + state.scenario.id, state.scenario);
+      const idx = state.scenarioIndex.find(x => x.id === state.scenario.id);
+      if (idx){ idx.title = state.scenario.title; idx.updatedAt = state.scenario.updatedAt; }
+      await sSet('scenarios:index', state.scenarioIndex);
+    }, 350);
+  }
+
   function scheduleSave(){
+    if (state.ui.scenarioEditorOpen && state.scenario){
+      scheduleScenarioSave();
+      return;
+    }
     if (!state.story) return;
     state.story.updatedAt = Date.now();
     if (state.story.turns.length){
@@ -1989,7 +2134,6 @@
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
     const languageLine = buildLanguageInstruction(s.memory);
 
-    // POV: separa NARRAÇÃO (protagonista = "eu") de DIÁLOGO (outros personagens falam "você" com a protagonista).
     const povLine = [
       'PONTO DE VISTA (POV) — REGRA CRÍTICA, LEIA COM ATENÇÃO:',
       '',
@@ -1999,15 +2143,12 @@
       '',
       '3) Outros personagens continuam em TERCEIRA PESSOA tanto na narração quanto no diálogo sobre eles ("ele diz", "ela sorri", "o General entra"). Só o protagonista é "eu" na narração.',
       '',
-      'EXEMPLOS — PREste ATENÇÃO NA DIFERENÇA:',
+      'EXEMPLOS — PRESTE ATENÇÃO NA DIFERENÇA:',
       'ERRADO (narração em 2ª pessoa): "Você entra na sala e vê o General."',
       'CERTO  (narração em 1ª pessoa): "Eu entro na sala e vejo o General."',
       '',
       'ERRADO (outro personagem tratando a protagonista como 3ª pessoa): \'Ele pergunta: "Ela tem dezoito anos?"\' — errado porque ele está falando COM ela, não sobre ela.',
       'CERTO  (outro personagem tratando a protagonista por "você"): \'Ele pergunta: "Você tem dezoito anos?"\'',
-      '',
-      'ERRADO (outro personagem narrando a protagonista): \'Ele olha pra ela e diz: "' + (protagName || 'ela') + ' está atrasada."\'',
-      'CERTO  (outro personagem falando direto com ela): \'Ele me olha e diz: "Você está atrasada."\'',
       '',
       'RESUMO:',
       '- Narração: protagonista = "eu".',
@@ -2099,14 +2240,11 @@
     return Math.max(1, base + reserve);
   }
 
-  // Normaliza endpoint: aceita ".../v1", ".../v1/chat/completions", ou a URL base.
-  // Sempre devolve uma URL terminando em /chat/completions.
   function normalizeEndpoint(url){
     let u = (url || '').trim().replace(/\/+$/, '');
     if (!u) return '';
     if (/\/chat\/completions$/i.test(u)) return u;
     if (/\/v1$/i.test(u)) return u + '/chat/completions';
-    // Se termina com outra coisa (/api, etc.), assume que é base e adiciona o path completo.
     if (/\/completions?$/i.test(u)) return u;
     return u + '/v1/chat/completions';
   }
@@ -2770,7 +2908,8 @@
     try{
       const opts = {excludeTurnId: t.id};
       if (guidance) opts.guidance = guidance;
-      if (t.isContinue) opts.isContinue = true;
+      // Se for continuação OU a abertura (não tem sourceAction), usa isContinue
+      if (t.isContinue || (t.isOpening && !t.sourceAction)) opts.isContinue = true;
       const result = await generate(t.sourceAction || '', opts);
       if (!t.alts) t.alts = [t.text];
       t.alts.push(result.text);
@@ -2949,9 +3088,11 @@
   }
 
   function cardCollection(type){
-    if (type === 'char') return state.story.memory.characters;
-    if (type === 'loc') return state.story.memory.locations;
-    if (type === 'group') return state.story.memory.groups;
+    const mem = currentMemory();
+    if (!mem) return [];
+    if (type === 'char') return mem.characters;
+    if (type === 'loc') return mem.locations;
+    if (type === 'group') return mem.groups;
   }
   function blankCard(type){
     if (type === 'char') return {id: uid(), name:'', age:'', appearance:'', personality:'', desc:'', knows:'', origin:'', relations:'', isProtagonist:false, alwaysOn:true, keywords:'', narrativeVoice:'', voiceExample:'', relationship:'', wants:'', status:'vivo', lastSeenTurn:-1};
@@ -2984,13 +3125,14 @@
     const nameLabel = card.name ? '"' + card.name + '"' : '(sem nome)';
     const ok = window.confirm('Apagar o ' + typeLabel + ' ' + nameLabel + '?\n\nEssa ação não pode ser desfeita.');
     if (!ok) return;
-    if (type === 'char') state.story.memory.characters = list.filter(c => c.id !== id);
-    if (type === 'loc') state.story.memory.locations = list.filter(c => c.id !== id);
-    if (type === 'group') state.story.memory.groups = list.filter(c => c.id !== id);
+    const mem = currentMemory();
+    if (type === 'char') mem.characters = list.filter(c => c.id !== id);
+    if (type === 'loc') mem.locations = list.filter(c => c.id !== id);
+    if (type === 'group') mem.groups = list.filter(c => c.id !== id);
     if (state.ui.expandedCard && state.ui.expandedCard.id === id){
       state.ui.expandedCard = null;
     }
-    if (state.ui.pendingUpdates){
+    if (!isScenarioMode() && state.ui.pendingUpdates){
       state.ui.pendingUpdates.items = state.ui.pendingUpdates.items.filter(it => it.cardId !== id);
       if (!state.ui.pendingUpdates.items.length) state.ui.pendingUpdates = null;
     }
@@ -3008,17 +3150,23 @@
     scheduleSave();
   }
   function addChapterManual(){
-    state.story.memory.chapters.push({ id: uid(), title: 'Capítulo ' + (state.story.memory.chapters.length + 1), text: '', archivedTurnIds: [] });
+    const mem = currentMemory();
+    if (!mem) return;
+    mem.chapters.push({ id: uid(), title: 'Capítulo ' + (mem.chapters.length + 1), text: '', archivedTurnIds: [] });
     scheduleSave();
     render();
   }
   function updateChapter(id, field, value){
-    const ch = state.story.memory.chapters.find(c => c.id === id);
+    const mem = currentMemory();
+    if (!mem) return;
+    const ch = mem.chapters.find(c => c.id === id);
     if (ch) ch[field] = value;
     scheduleSave();
   }
   function removeChapter(id){
-    const ch = state.story.memory.chapters.find(c => c.id === id);
+    const mem = currentMemory();
+    if (!mem) return;
+    const ch = mem.chapters.find(c => c.id === id);
     if (!ch) return;
     const hasIds = ch.archivedTurnIds && ch.archivedTurnIds.length;
     let msg = 'Apagar este capítulo resumido?';
@@ -3029,19 +3177,20 @@
     }
     const ok = window.confirm(msg);
     if (!ok) return;
-    if (hasIds){
+    if (hasIds && state.story){
       ch.archivedTurnIds.forEach(tid => {
         const t = state.story.turns.find(x => x.id === tid);
         if (t) t.archived = false;
       });
     }
-    state.story.memory.chapters = state.story.memory.chapters.filter(c => c.id !== id);
+    mem.chapters = mem.chapters.filter(c => c.id !== id);
     scheduleSave();
     render();
   }
 
   function unarchiveAllTurns(){
     const s = state.story;
+    if (!s) return;
     const archivedCount = s.turns.filter(t => t.archived).length;
     if (!archivedCount){
       updateStatus('Não há falas arquivadas pra restaurar.', false);
@@ -3057,14 +3206,16 @@
   }
 
   function setLanguage(lang){
-    if (!state.story) return;
-    state.story.memory.language = lang;
+    const mem = currentMemory();
+    if (!mem) return;
+    mem.language = lang;
     scheduleSave();
     render();
   }
   function updateLanguageCustom(val){
-    if (!state.story) return;
-    state.story.memory.languageCustom = val;
+    const mem = currentMemory();
+    if (!mem) return;
+    mem.languageCustom = val;
     scheduleSave();
   }
 
@@ -3113,10 +3264,96 @@
     `;
   }
 
-  async function createStory(){
-    const title = window.prompt('Nome da nova aventura:', 'Nova aventura');
+  // ============ CENÁRIOS: CRUD ============
+
+  async function createScenario(){
+    const title = window.prompt('Nome do novo cenário:', 'Novo cenário');
     if (title === null) return;
-    const s = newStory(title || 'Nova aventura');
+    const sc = newScenario(title || 'Novo cenário');
+    state.scenarioIndex.unshift({id:sc.id, title:sc.title, updatedAt:sc.updatedAt});
+    await sSet('scenario:' + sc.id, sc);
+    await sSet('scenarios:index', state.scenarioIndex);
+    await openScenarioEditor(sc.id);
+  }
+
+  async function openScenarioEditor(id){
+    const sc = await sGet('scenario:' + id);
+    if (!sc) return;
+    state.scenario = normalizeScenario(sc);
+    state.ui.scenarioEditorOpen = true;
+    state.ui.memoryTab = 'memory';
+    state.ui.expandedCard = null;
+    state.ui.memoryPanelOpen = true;
+    render();
+  }
+
+  function closeScenarioEditor(){
+    if (state.scenario){
+      sSet('scenario:' + state.scenario.id, state.scenario).catch(() => {});
+      const idx = state.scenarioIndex.find(x => x.id === state.scenario.id);
+      if (idx){ idx.title = state.scenario.title; idx.updatedAt = state.scenario.updatedAt; }
+      sSet('scenarios:index', state.scenarioIndex).catch(() => {});
+    }
+    state.ui.scenarioEditorOpen = false;
+    state.scenario = null;
+    state.ui.memoryPanelOpen = false;
+    state.ui.expandedCard = null;
+    render();
+  }
+
+  async function deleteScenario(id){
+    const ok = window.confirm('Apagar este cenário pra sempre?\n\nAs aventuras criadas a partir dele NÃO são afetadas.');
+    if (!ok) return;
+    await sDelete('scenario:' + id);
+    state.scenarioIndex = state.scenarioIndex.filter(x => x.id !== id);
+    await sSet('scenarios:index', state.scenarioIndex);
+    render();
+  }
+
+  async function duplicateScenario(id){
+    const sc = await sGet('scenario:' + id);
+    if (!sc) return;
+    const copy = JSON.parse(JSON.stringify(sc));
+    copy.id = uid();
+    copy.title = (sc.title || 'Cenário') + ' (cópia)';
+    copy.createdAt = Date.now();
+    copy.updatedAt = Date.now();
+    state.scenarioIndex.unshift({id:copy.id, title:copy.title, updatedAt:copy.updatedAt});
+    await sSet('scenario:' + copy.id, copy);
+    await sSet('scenarios:index', state.scenarioIndex);
+    render();
+    updateStatus('Cenário duplicado.', false);
+  }
+
+  // Cria uma nova aventura a partir de um cenário (copia memória + título + abertura).
+  async function createStoryFromScenario(scenarioId, title){
+    let mem = blankMemory();
+    let suggestedTitle = title || 'Nova aventura';
+    let opening = '';
+    if (scenarioId){
+      const sc = await sGet('scenario:' + scenarioId);
+      if (sc){
+        mem = JSON.parse(JSON.stringify(sc.memory || blankMemory()));
+        mem = normalizeMemory(mem);
+        mem.chapters = [];
+        opening = (sc.opening || '').trim();
+        if (!title) suggestedTitle = sc.title || 'Nova aventura';
+      }
+    }
+    const s = newStory(suggestedTitle);
+    s.memory = mem;
+    // A abertura (opening) do cenário vira a primeira narração da aventura.
+    if (opening){
+      s.turns.push({
+        id: uid(),
+        type: 'ai',
+        text: opening,
+        isOpening: true,
+        alts: [opening],
+        altIndex: 0,
+        memorySnapshot: JSON.parse(JSON.stringify(s.memory))
+      });
+    }
     state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
     state.story = s;
     state.ui.expandedCard = null;
@@ -3127,6 +3364,33 @@
     await sSet('stories:index', state.index);
     await sSet('settings:lastOpen', s.id);
     state.ui.modal = null;
+    state.ui.newAdventureModal = null;
+    render();
+    scrollFeedToBottom();
+  }
+
+  // Salva a memória da aventura atual como um novo cenário (NÃO copia abertura, capítulos, etc).
+  async function saveCurrentAsScenario(){
+    const s = state.story;
+    if (!s) return;
+    const suggested = s.title + ' — cenário';
+    const title = window.prompt('Nome do cenário:', suggested);
+    if (title === null) return;
+    const sc = newScenario(title || suggested);
+    sc.memory = JSON.parse(JSON.stringify(s.memory));
+    // Zera os capítulos (fazem parte da aventura, não do cenário)
+    sc.memory.chapters = [];
+    state.scenarioIndex.unshift({id:sc.id, title:sc.title, updatedAt:sc.updatedAt});
+    await sSet('scenario:' + sc.id, sc);
+    await sSet('scenarios:index', state.scenarioIndex);
+    updateStatus('Cenário criado: "' + sc.title + '"', false);
+    render();
+  }
+
+  // ============ FIM CENÁRIOS ============
+
+  async function createStory(){
+    state.ui.newAdventureModal = { title: '', scenarioId: '' };
     render();
   }
 
@@ -3266,7 +3530,7 @@
               ${items.map(t => {
                 const turnIndex = s.turns.indexOf(t) + 1;
                 const checked = ep.selectedIds.includes(t.id);
-                const actionText = t.sourceAction || '(continuação)';
+                const actionText = t.sourceAction || (t.isOpening ? '🎬 abertura' : '(continuação)');
                 const previewText = (t.text || '').replace(/\s+/g, ' ').slice(0, 100);
                 return `
                   <label class="extract-item ${checked ? 'checked' : ''}">
@@ -3298,6 +3562,55 @@
     `;
   }
 
+  function renderNewAdventureModal(){
+    const nam = state.ui.newAdventureModal;
+    if (!nam) return '';
+    const selectedScenario = nam.scenarioId ? state.scenarioIndex.find(x => x.id === nam.scenarioId) : null;
+    return `
+      <div class="card-modal-overlay" id="newAdventureOverlay">
+        <div class="card-modal" style="max-width:520px;">
+          <div class="card-modal-wrap">
+            <button class="close icon ghost" id="closeNewAdventure" title="fechar">✕</button>
+            <h2 style="margin-bottom:4px;">＋ Nova aventura</h2>
+            <div class="sub">Escolha um título e um ponto de partida</div>
+
+            <div class="field" style="margin-bottom:14px;">
+              <label style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; display:block;">Título</label>
+              <input type="text" id="newAdvTitle" value="${esc(nam.title || '')}" placeholder="Nova aventura" style="width:100%; background:var(--ink); border:1px solid var(--border); border-radius:10px; color:var(--text); font-family:'Newsreader', serif; font-size:16px; padding:11px 13px;">
+            </div>
+
+            <div class="field" style="margin-bottom:14px;">
+              <label style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; display:block;">Começar de</label>
+              <select id="newAdvScenario" style="width:100%; background:var(--ink); border:1px solid var(--border); border-radius:10px; color:var(--text); font-family:'Inter', sans-serif; font-size:13px; padding:11px 13px;">
+                <option value="">Em branco</option>
+                ${state.scenarioIndex.map(sc => `
+                  <option value="${sc.id}" ${nam.scenarioId === sc.id ? 'selected' : ''}>🎬 ${esc(sc.title)}</option>
+                `).join('')}
+              </select>
+              <div class="summ-note" style="font-size:11px; margin-top:6px;">
+                ${state.scenarioIndex.length
+                  ? 'Cenários herdam fichas, mundo, notas, segredos e (se tiverem) a abertura.'
+                  : 'Nenhum cenário ainda. Crie um no 📚 → Cenários.'}
+              </div>
+            </div>
+
+            ${selectedScenario && selectedScenario.opening ? `
+              <div class="helpbox" style="font-size:11.5px; background: rgba(212,169,96,0.06); border:1px solid rgba(212,169,96,0.25);">
+                🎬 Este cenário tem uma <strong>abertura</strong> — ela vai virar a primeira narração da aventura.
+              </div>
+            ` : ''}
+
+            <div class="modal-actions" style="display:flex; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--border-soft);">
+              <span style="flex:1;"></span>
+              <button id="btnNewAdvCancel">cancelar</button>
+              <button class="primary" id="btnNewAdvCreate">criar aventura</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function render(){
     const app = document.getElementById('app');
     const s = state.story;
@@ -3309,10 +3622,10 @@
     app.classList.remove('force-mobile', 'force-desktop');
     if (state.ui.forcedLayout === 'mobile') app.classList.add('force-mobile');
     if (state.ui.forcedLayout === 'desktop') app.classList.add('force-desktop');
-    if (!s){ app.innerHTML = '<div style="padding:40px;text-align:center;color:#9a9fb0;">Carregando…</div>'; return; }
+    if (!s && !isScenarioMode()){ app.innerHTML = '<div style="padding:40px;text-align:center;color:#9a9fb0;">Carregando…</div>'; return; }
 
     let aiSeen = 0;
-    const turnHtml = s.turns.map((t, i) => {
+    const turnHtml = (s ? s.turns.map((t, i) => {
       const sep = (i > 0 && !/\s$/.test(s.turns[i-1].text || '') && !/^\s/.test(t.text || '')) ? ' ' : '';
       let alt = '';
       if (t.type === 'ai'){
@@ -3320,7 +3633,7 @@
         aiSeen++;
       }
       return sep + renderTurn(t, i, alt);
-    }).join('');
+    }).join('') : '');
 
     const memTab = state.ui.memoryTab || 'memory';
 
@@ -3338,16 +3651,22 @@
       vectorStatus = '🧠 memória vetorial: ' + count + ' trechos indexados';
     }
 
+    const scenarioMode = isScenarioMode();
+    const mainTitle = scenarioMode ? (state.scenario ? state.scenario.title : 'Cenário') : (s ? s.title : '');
+    const headerTag = scenarioMode ? 'Editando cenário' : 'Aventura 1.0';
+
     app.innerHTML = `
       <header>
         <div class="titlewrap">
-          <span class="tag">Aventura 1.0</span>
-          <h1 id="titleField" contenteditable="true" spellcheck="false">${esc(s.title)}</h1>
+          <span class="tag" style="${scenarioMode ? 'color:var(--scenario-accent);' : ''}">${headerTag}</span>
+          ${scenarioMode
+            ? `<h1 style="color:var(--scenario-accent);">${esc(mainTitle)}</h1>`
+            : `<h1 id="titleField" contenteditable="true" spellcheck="false">${esc(mainTitle)}</h1>`}
         </div>
         <div class="btns">
           <span id="saveWarning" class="save-warning" style="display:${state.ui.saveWarning ? 'inline' : 'none'};">⚠ não salvou</span>
           <button class="icon" id="btnMemory" title="Memória">📖</button>
-          <button class="icon" id="btnStories" title="Minhas histórias">📚</button>
+          <button class="icon" id="btnStories" title="Minhas histórias & cenários">📚</button>
           <button class="icon" id="btnNew" title="Nova aventura">＋</button>
           <button class="icon layout-toggle" id="btnLayoutToggle" title="Alternar layout">${state.ui.forcedLayout === 'mobile' ? '📱' : state.ui.forcedLayout === 'desktop' ? '🖥️' : '🔄'}</button>
           <button class="icon" id="btnSettings" title="Configurações">⚙️</button>
@@ -3355,8 +3674,23 @@
       </header>
       <div class="drawer-backdrop ${state.ui.memoryPanelOpen ? 'open' : ''}" id="memoryBackdrop"></div>
       <div class="layout">
-        <aside class="memory-panel ${state.ui.memoryPanelOpen ? 'open' : ''}">
+        <aside class="memory-panel ${state.ui.memoryPanelOpen ? 'open' : ''} ${scenarioMode ? 'scenario-mode' : ''}">
           <button class="icon ghost memory-panel-close" id="btnCloseMemory">✕ fechar</button>
+
+          ${scenarioMode ? `
+            <div class="scenario-banner">
+              <div class="sb-label">🎬 Modo cenário</div>
+              <div class="sb-title">${esc(state.scenario.title)}</div>
+              <div class="sb-desc">
+                Mudanças aqui afetam <strong>novas aventuras</strong>. Aventuras já criadas não são tocadas.
+              </div>
+              <div class="sb-actions">
+                <button class="scenario-btn" id="btnRenameScenario">✎ renomear</button>
+                <button id="btnDuplicateScenario">⧉ duplicar</button>
+              </div>
+            </div>
+          ` : ''}
+
           <div class="mem-tabs">
             <button class="mem-tab ${memTab === 'memory' ? 'active' : ''}" data-memtab="memory" title="Memória">📖</button>
             <button class="mem-tab ${memTab === 'chars' ? 'active' : ''}" data-memtab="chars" title="Personagens">🎭</button>
@@ -3372,58 +3706,73 @@
         </aside>
 
         <main>
-          <div class="feed">
-            ${s.turns.length === 0 ? `
+          ${scenarioMode ? `
+            <div class="feed">
               <div class="empty-state">
-                <h2>A página está em branco.</h2>
-                <p>Escreva a primeira ação lá embaixo pra começar a história.</p>
-              </div>` : `<div class="page">${turnHtml}</div>`}
-          </div>
-          <div class="composer" style="${editingTurnId ? 'display:none;' : ''}">
-            <div class="composer-inner">
-              ${renderUpdatesPanel()}
-              <textarea id="composer" placeholder="O que eu faço agora?" rows="2">${esc(state.ui.composerText)}</textarea>
-              <div id="tokenEstimate" class="token-estimate mono"></div>
-
-              ${state.ui.retryGuidanceOpen ? `
-                <div class="retry-guidance">
-                  <input type="text" id="retryGuidanceInput" placeholder="O que deve acontecer nessa tentativa? (opcional)" value="${esc(state.ui.retryGuidanceText || '')}">
-                  <button class="primary" id="btnRetryGo">Gerar</button>
-                  <button class="ghost" id="btnRetryCancel">cancelar</button>
+                <h2 style="color:var(--scenario-accent);">🎬 Editando cenário</h2>
+                <p>Preencha as fichas, mundo e notas do lado esquerdo.<br>Quando terminar, é só fechar o painel.</p>
+                <p class="summ-note" style="margin-top:16px;">
+                  Este cenário é um <strong>template</strong>: nova aventura + escolher "🎬 ${esc(state.scenario.title)}" copia tudo pra uma aventura em branco (sem histórico de turnos).
+                </p>
+                <div style="margin-top:24px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                  <button class="scenario-btn" id="btnNewStoryFromScenario">▶ Criar aventura com este cenário</button>
                 </div>
-              ` : ''}
-
-              <div class="dungeon-bar dungeon-bar-main">
-                <button id="btnContinue" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Continua a cena sem você escrever nada">▶ Continuar</button>
-                <div class="retry-group">
-                  <button id="btnRetry" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Gera uma versão nova da última cena">↺ Retry</button>
-                  ${(() => { const lt = lastAiTurn(); return (lt && lt.alts && lt.alts.length > 1) ? `
-                    <button class="retry-nav" data-altnav="${lt.id}:-1" ${lt.altIndex<=0?'disabled':''} title="Tentativa anterior">‹</button>
-                    <span class="retry-count mono">${(lt.altIndex||0)+1}/${lt.alts.length}</span>
-                    <button class="retry-nav" data-altnav="${lt.id}:1" ${lt.altIndex>=lt.alts.length-1?'disabled':''} title="Próxima tentativa">›</button>
-                  ` : ''; })()}
-                  <button id="btnRetryOptions" title="Instrução específica pro retry">🎯</button>
-                </div>
-              </div>
-              <div class="dungeon-bar dungeon-bar-secondary">
-                <button id="btnExtractUpdates" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Pede à IA pra extrair mudanças de estado (com seleção de turnos)">🧠 extrair</button>
-                <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer">↩ Desfazer</button>
-                <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
-                <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
-                <span class="spacer"></span>
-                <span class="status ${state.ui.statusErr?'err':''}">${esc(state.ui.statusMsg)}</span>
-              </div>
-              ${vectorStatus ? `<div class="status mono" style="margin-top:6px; opacity:.7;">${esc(vectorStatus)}</div>` : ''}
-              <div class="composer-row">
-                <span class="spacer"></span>
-                <button class="primary" id="btnSend" ${state.ui.generating?'disabled':''}>${state.ui.generating ? 'Gerando…' : 'Enviar ➤'}</button>
               </div>
             </div>
-          </div>
+          ` : `
+            <div class="feed">
+              ${s.turns.length === 0 ? `
+                <div class="empty-state">
+                  <h2>A página está em branco.</h2>
+                  <p>Escreva a primeira ação lá embaixo pra começar a história.</p>
+                </div>` : `<div class="page">${turnHtml}</div>`}
+            </div>
+            <div class="composer" style="${editingTurnId ? 'display:none;' : ''}">
+              <div class="composer-inner">
+                ${renderUpdatesPanel()}
+                <textarea id="composer" placeholder="O que eu faço agora?" rows="2">${esc(state.ui.composerText)}</textarea>
+                <div id="tokenEstimate" class="token-estimate mono"></div>
+
+                ${state.ui.retryGuidanceOpen ? `
+                  <div class="retry-guidance">
+                    <input type="text" id="retryGuidanceInput" placeholder="O que deve acontecer nessa tentativa? (opcional)" value="${esc(state.ui.retryGuidanceText || '')}">
+                    <button class="primary" id="btnRetryGo">Gerar</button>
+                    <button class="ghost" id="btnRetryCancel">cancelar</button>
+                  </div>
+                ` : ''}
+
+                <div class="dungeon-bar dungeon-bar-main">
+                  <button id="btnContinue" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Continua a cena sem você escrever nada">▶ Continuar</button>
+                  <div class="retry-group">
+                    <button id="btnRetry" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Gera uma versão nova da última cena">↺ Retry</button>
+                    ${(() => { const lt = lastAiTurn(); return (lt && lt.alts && lt.alts.length > 1) ? `
+                      <button class="retry-nav" data-altnav="${lt.id}:-1" ${lt.altIndex<=0?'disabled':''} title="Tentativa anterior">‹</button>
+                      <span class="retry-count mono">${(lt.altIndex||0)+1}/${lt.alts.length}</span>
+                      <button class="retry-nav" data-altnav="${lt.id}:1" ${lt.altIndex>=lt.alts.length-1?'disabled':''} title="Próxima tentativa">›</button>
+                    ` : ''; })()}
+                    <button id="btnRetryOptions" title="Instrução específica pro retry">🎯</button>
+                  </div>
+                </div>
+                <div class="dungeon-bar dungeon-bar-secondary">
+                  <button id="btnExtractUpdates" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Pede à IA pra extrair mudanças de estado (com seleção de turnos)">🧠 extrair</button>
+                  <button id="btnUndo" ${(!state.ui.undoStack || !state.ui.undoStack.length) ? 'disabled' : ''} title="Desfazer">↩ Desfazer</button>
+                  <button id="btnRedo" ${(!state.ui.redoStack || !state.ui.redoStack.length) ? 'disabled' : ''} title="Refazer">↪ Refazer</button>
+                  <button class="danger" id="btnErase" ${state.ui.generating || !s.turns.length ? 'disabled' : ''} title="Apaga o último trecho gerado">🗑 Erase</button>
+                  <span class="spacer"></span>
+                  <span class="status ${state.ui.statusErr?'err':''}">${esc(state.ui.statusMsg)}</span>
+                </div>
+                ${vectorStatus ? `<div class="status mono" style="margin-top:6px; opacity:.7;">${esc(vectorStatus)}</div>` : ''}
+                <div class="composer-row">
+                  <span class="spacer"></span>
+                  <button class="primary" id="btnSend" ${state.ui.generating?'disabled':''}>${state.ui.generating ? 'Gerando…' : 'Enviar ➤'}</button>
+                </div>
+              </div>
+            </div>
+          `}
         </main>
 
         <nav class="spine" title="Clique num ponto pra voltar até ali">
-          ${s.turns.map((t,i) => `<div class="tab ${t.type} ${i===s.turns.length-1?'current':''}" data-jump="${t.id}">${i+1}</div>`).join('')}
+          ${s ? s.turns.map((t,i) => `<div class="tab ${t.type} ${i===s.turns.length-1?'current':''}" data-jump="${t.id}">${i+1}</div>`).join('') : ''}
         </nav>
       </div>
 
@@ -3431,16 +3780,19 @@
       ${state.ui.modal === 'stories' ? renderStoriesModal() : ''}
       ${state.ui.expandedCard ? renderCardEditorModal() : ''}
       ${state.ui.extractPicker && state.ui.extractPicker.open ? renderExtractPicker() : ''}
+      ${state.ui.newAdventureModal ? renderNewAdventureModal() : ''}
     `;
 
     bindEvents();
 
-    if (wasAtBottom){
-      const feed = document.querySelector('.feed');
-      if (feed) feed.scrollTop = feed.scrollHeight;
-    } else if (savedFeedScroll !== null){
-      const feed = document.querySelector('.feed');
-      if (feed) feed.scrollTop = savedFeedScroll;
+    if (!scenarioMode){
+      if (wasAtBottom){
+        const feed = document.querySelector('.feed');
+        if (feed) feed.scrollTop = feed.scrollHeight;
+      } else if (savedFeedScroll !== null){
+        const feed = document.querySelector('.feed');
+        if (feed) feed.scrollTop = savedFeedScroll;
+      }
     }
     if (savedMemScroll !== null){
       const mem = document.querySelector('.memory-panel');
@@ -3450,13 +3802,16 @@
     const editbox = document.querySelector('.turn-editbox');
     if (editbox) autoSizeTextarea(editbox);
 
-    updateTokenEstimateDisplay();
+    if (!scenarioMode) updateTokenEstimateDisplay();
   }
 
   function renderMemoryTabContent(){
-    const s = state.story;
-    const ps = state.ui.pendingSummary;
-    const currentLang = s.memory.language || 'pt-BR';
+    const mem = currentMemory();
+    if (!mem) return '';
+    const ps = isScenarioMode() ? null : state.ui.pendingSummary;
+    const currentLang = mem.language || 'pt-BR';
+    const scenarioMode = isScenarioMode();
+    const scenarioOpening = scenarioMode && state.scenario ? (state.scenario.opening || '') : '';
     return `
       <div>
         <h2>Memória</h2>
@@ -3494,122 +3849,155 @@
             </label>
           </div>
           ${currentLang === 'custom' ? `
-            <textarea id="langCustom" rows="3" placeholder="ex: Narração em PT-BR, diálogos do John em inglês.">${esc(s.memory.languageCustom || '')}</textarea>
+            <textarea id="langCustom" rows="3" placeholder="ex: Narração em PT-BR, diálogos do John em inglês.">${esc(mem.languageCustom || '')}</textarea>
           ` : ''}
         </div>
 
         <div class="field">
           <label>Mundo / cenário</label>
-          <textarea id="memWorld" rows="3" placeholder="Onde e quando se passa...">${esc(s.memory.world)}</textarea>
+          <textarea id="memWorld" rows="3" placeholder="Onde e quando se passa...">${esc(mem.world)}</textarea>
         </div>
         <div class="field">
           <label>Notas do autor</label>
-          <textarea id="memNote" rows="2" placeholder="Regras fixas, tom...">${esc(s.memory.authorNote)}</textarea>
+          <textarea id="memNote" rows="2" placeholder="Regras fixas, tom...">${esc(mem.authorNote)}</textarea>
         </div>
-        <div class="field">
-          <label>Capítulos resumidos (editáveis)</label>
-          ${(() => {
-            const conn = activeConnector();
-            const totalLive = s.turns.filter(t => !t.archived);
-            const selected = selectTurnsByBudget(totalLive, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
-            const dropped = totalLive.length - selected.length;
-            const dismissedAt = state.ui.nudgeDismissedAt || 0;
-            if (dropped >= 10 && dropped > dismissedAt && !state.ui.summarizing && !ps){
-              return `<div class="nudge-banner">
-                ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo.
-                <div style="margin-top:7px; display:flex; gap:6px;">
-                  <button id="btnNudgeSummarize">🧠 Resumir agora</button>
-                  <button id="btnNudgeDismiss" class="ghost" data-dropped="${dropped}">dispensar</button>
-                </div>
-              </div>`;
-            }
-            return '';
-          })()}
 
-          ${ps ? `
-            <div class="pending-summary">
-              <div class="pending-title">📝 Resumo sugerido — revise antes de aceitar</div>
-              <div class="summ-note" style="margin-bottom:8px;">A IA resumiu ${ps.chunkIds.length} falas.</div>
-              <textarea id="pendingSummaryText" rows="7">${esc(ps.text)}</textarea>
-              <div class="pending-actions">
-                <button class="primary" id="btnAcceptSummary" style="flex:1;">✓ Aceitar</button>
-                <button id="btnDiscardSummary">✕ Descartar</button>
-              </div>
+        ${scenarioMode ? `
+          <div class="field">
+            <div class="opening-label-wrap">
+              <span class="opening-icon">🎬</span>
+              <label style="margin-bottom:0;">Abertura (opening)</label>
             </div>
+            <textarea id="scenarioOpening" rows="7" placeholder="A cena inicial da aventura...&#10;&#10;Ex: A chuva bate forte no para-brisa. O Impala corta a estrada vazia em direção ao letreiro de neon que pisca ao longe.">${esc(scenarioOpening)}</textarea>
+            <div class="summ-note" style="font-size:11px; margin-top:6px;">
+              Esse texto vira a <strong>primeira narração</strong> quando você criar uma aventura com este cenário. Depois disso, é você quem toma o controle. Deixe vazio pra começar com a página em branco.
+            </div>
+          </div>
+        ` : ''}
+
+        ${scenarioMode ? `
+          <div class="field">
+            <div class="summ-note" style="font-size:12px;">
+              ℹ️ Capítulos resumidos só existem em aventuras — um cenário não tem histórico. Pule este campo.
+            </div>
+          </div>
+        ` : `
+          <div class="field">
+            <label>Capítulos resumidos (editáveis)</label>
+            ${(() => {
+              const conn = activeConnector();
+              const totalLive = state.story.turns.filter(t => !t.archived);
+              const selected = selectTurnsByBudget(totalLive, conn.historyTokenBudget || 3000, conn.maxHistoryTurns || 40);
+              const dropped = totalLive.length - selected.length;
+              const dismissedAt = state.ui.nudgeDismissedAt || 0;
+              if (dropped >= 10 && dropped > dismissedAt && !state.ui.summarizing && !ps){
+                return `<div class="nudge-banner">
+                  ⚠ ${dropped} falas antigas já não cabem mais no contexto ativo.
+                  <div style="margin-top:7px; display:flex; gap:6px;">
+                    <button id="btnNudgeSummarize">🧠 Resumir agora</button>
+                    <button id="btnNudgeDismiss" class="ghost" data-dropped="${dropped}">dispensar</button>
+                  </div>
+                </div>`;
+              }
+              return '';
+            })()}
+
+            ${ps ? `
+              <div class="pending-summary">
+                <div class="pending-title">📝 Resumo sugerido — revise antes de aceitar</div>
+                <div class="summ-note" style="margin-bottom:8px;">A IA resumiu ${ps.chunkIds.length} falas.</div>
+                <textarea id="pendingSummaryText" rows="7">${esc(ps.text)}</textarea>
+                <div class="pending-actions">
+                  <button class="primary" id="btnAcceptSummary" style="flex:1;">✓ Aceitar</button>
+                  <button id="btnDiscardSummary">✕ Descartar</button>
+                </div>
+              </div>
+            ` : ''}
+
+            ${mem.chapters.map(ch => `
+              <div class="char-card" data-chapterid="${ch.id}" style="margin-bottom:8px;">
+                <div class="ccard-top">
+                  <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título" style="flex:1;">
+                  <button class="danger icon" data-chapterdel="${ch.id}" title="apagar (restaura as falas originais)">✕</button>
+                </div>
+                <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo...">${esc(ch.text)}</textarea>
+                <div class="summ-note" style="font-size:10.5px; margin-top:4px; opacity:.7;">
+                  ${ch.archivedTurnIds && ch.archivedTurnIds.length
+                    ? '📎 resume ' + ch.archivedTurnIds.length + ' falas arquivadas'
+                    : '⚠ capítulo antigo'}
+                </div>
+              </div>
+            `).join('') || '<div class="summ-note">Nenhum capítulo ainda.</div>'}
+            <button id="btnAddChapter" style="width:100%;">＋ Adicionar capítulo manual</button>
+          </div>
+
+          <button id="btnSummarize" style="width:100%" ${(state.ui.summarizing || ps) ? 'disabled' : ''}>
+            ${state.ui.summarizing ? '🧠 Resumindo…' : (ps ? '⚠ Revise o resumo acima primeiro' : '🧠 Resumir início automaticamente')}
+          </button>
+
+          ${state.story.turns.filter(t => t.archived).length ? `
+            <button id="btnUnarchiveAll" style="width:100%; margin-top:10px;">🔓 Desarquivar tudo (${state.story.turns.filter(t => t.archived).length})</button>
           ` : ''}
 
-          ${s.memory.chapters.map(ch => `
-            <div class="char-card" data-chapterid="${ch.id}" style="margin-bottom:8px;">
-              <div class="ccard-top">
-                <input type="text" data-chapterfield="title" data-chapterid2="${ch.id}" value="${esc(ch.title)}" placeholder="Título" style="flex:1;">
-                <button class="danger icon" data-chapterdel="${ch.id}" title="apagar (restaura as falas originais)">✕</button>
-              </div>
-              <textarea data-chapterfield="text" data-chapterid2="${ch.id}" rows="3" placeholder="Resumo...">${esc(ch.text)}</textarea>
-              <div class="summ-note" style="font-size:10.5px; margin-top:4px; opacity:.7;">
-                ${ch.archivedTurnIds && ch.archivedTurnIds.length
-                  ? '📎 resume ' + ch.archivedTurnIds.length + ' falas arquivadas'
-                  : '⚠ capítulo antigo'}
-              </div>
+          <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border-soft);">
+            <div class="summ-note" style="font-size:11.5px; margin-bottom:8px;">
+              💡 Salve o estado atual como <strong>cenário reutilizável</strong> (fichas, mundo, notas, segredos — sem o histórico).
             </div>
-          `).join('') || '<div class="summ-note">Nenhum capítulo ainda.</div>'}
-          <button id="btnAddChapter" style="width:100%;">＋ Adicionar capítulo manual</button>
-        </div>
-
-        <button id="btnSummarize" style="width:100%" ${(state.ui.summarizing || ps) ? 'disabled' : ''}>
-          ${state.ui.summarizing ? '🧠 Resumindo…' : (ps ? '⚠ Revise o resumo acima primeiro' : '🧠 Resumir início automaticamente')}
-        </button>
-
-        ${s.turns.filter(t => t.archived).length ? `
-          <button id="btnUnarchiveAll" style="width:100%; margin-top:10px;">🔓 Desarquivar tudo (${s.turns.filter(t => t.archived).length})</button>
-        ` : ''}
+            <button class="scenario-btn" id="btnSaveAsScenario" style="width:100%;">🎬 Salvar esta aventura como cenário</button>
+          </div>
+        `}
       </div>
     `;
   }
 
   function renderCharsTabContent(){
-    const s = state.story;
+    const mem = currentMemory();
+    if (!mem) return '';
     return `
       <div>
         <h2>Personagens</h2>
         <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar. A IA sugere mudanças de relação/querer/status ao final de cada resposta — você revisa antes de aplicar.</div>
-        ${s.memory.characters.map(c => renderCardPreview('char', c)).join('')}
+        ${mem.characters.map(c => renderCardPreview('char', c)).join('')}
         <button data-addtype="char" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar personagem</button>
       </div>
     `;
   }
 
   function renderLocsTabContent(){
-    const s = state.story;
+    const mem = currentMemory();
+    if (!mem) return '';
     return `
       <div>
         <h2>Locais</h2>
         <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar.</div>
-        ${s.memory.locations.map(l => renderCardPreview('loc', l)).join('')}
+        ${mem.locations.map(l => renderCardPreview('loc', l)).join('')}
         <button data-addtype="loc" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar local</button>
       </div>
     `;
   }
 
   function renderGroupsTabContent(){
-    const s = state.story;
+    const mem = currentMemory();
+    if (!mem) return '';
     return `
       <div>
         <h2>Grupos / famílias</h2>
         <div class="summ-note" style="margin-bottom:8px;">Toque numa ficha pra editar.</div>
-        ${s.memory.groups.map(g => renderCardPreview('group', g)).join('')}
+        ${mem.groups.map(g => renderCardPreview('group', g)).join('')}
         <button data-addtype="group" class="add-card-btn" style="width:100%; margin-top:4px;">＋ Adicionar grupo/família</button>
       </div>
     `;
   }
 
   function renderSecretsTabContent(){
-    const s = state.story;
+    const mem = currentMemory();
+    if (!mem) return '';
     return `
       <div>
         <h2>Segredos do mundo</h2>
         <div class="field">
           <label>Oculto do protagonista</label>
-          <textarea id="memSecrets" rows="8" placeholder="Coisas que existem mas ainda não foram descobertas...">${esc(s.memory.secrets)}</textarea>
+          <textarea id="memSecrets" rows="8" placeholder="Coisas que existem mas ainda não foram descobertas...">${esc(mem.secrets)}</textarea>
         </div>
       </div>
     `;
@@ -3619,12 +4007,14 @@
     if (!state.ui.expandedCard) return '';
     const {type, id} = state.ui.expandedCard;
     const list = cardCollection(type);
+    if (!list) return '';
     const c = list.find(x => x.id === id);
     if (!c){
       state.ui.expandedCard = null;
       return '';
     }
     const typeLabel = type === 'char' ? 'Personagem' : type === 'loc' ? 'Local' : 'Grupo / Família';
+    const scenarioMode = isScenarioMode();
 
     let body = '';
 
@@ -3651,7 +4041,7 @@
           </div>
         ` : ''}
 
-        <div class="field-inline-label">Status</div>
+        <div class="field-inline-label">Status ${scenarioMode ? '(inicial)' : ''}</div>
         <select data-ctype="char" data-cid="${c.id}" data-cfield="status" style="width:100%;">
           <option value="vivo" ${c.status==='vivo'?'selected':''}>vivo</option>
           <option value="morto" ${c.status==='morto'?'selected':''}>morto</option>
@@ -3659,11 +4049,11 @@
           <option value="desconhecido" ${c.status==='desconhecido'?'selected':''}>desconhecido</option>
         </select>
 
-        <div class="field-inline-label">Relação atual com a protagonista</div>
-        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relationship" rows="2" placeholder="Como ele se sente em relação à protagonista agora...">${esc(c.relationship || '')}</textarea>
+        <div class="field-inline-label">Relação ${scenarioMode ? 'inicial ' : 'atual '}com a protagonista</div>
+        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="relationship" rows="2" placeholder="Como ele se sente em relação à protagonista${scenarioMode ? ' no início' : ' agora'}...">${esc(c.relationship || '')}</textarea>
 
-        <div class="field-inline-label">O que ele quer agora</div>
-        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="wants" rows="2" placeholder="Objetivo atual dele (agenda própria)...">${esc(c.wants || '')}</textarea>
+        <div class="field-inline-label">O que ele quer ${scenarioMode ? 'no início' : 'agora'}</div>
+        <textarea data-ctype="char" data-cid="${c.id}" data-cfield="wants" rows="2" placeholder="Objetivo${scenarioMode ? ' inicial' : ' atual'} dele (agenda própria)...">${esc(c.wants || '')}</textarea>
 
         <div class="field-inline-label">Aparência física</div>
         <textarea data-ctype="char" data-cid="${c.id}" data-cfield="appearance" rows="3" placeholder="...">${esc(c.appearance)}</textarea>
@@ -3677,7 +4067,7 @@
         <div class="field-inline-label">Histórico / papel na história</div>
         <textarea data-ctype="char" data-cid="${c.id}" data-cfield="desc" rows="3" placeholder="...">${esc(c.desc)}</textarea>
 
-        <div class="field-inline-label">O que sabe até agora</div>
+        <div class="field-inline-label">O que sabe ${scenarioMode ? 'no início' : 'até agora'}</div>
         <textarea data-ctype="char" data-cid="${c.id}" data-cfield="knows" rows="3" placeholder="...">${esc(c.knows)}</textarea>
       `;
     } else if (type === 'loc'){
@@ -3717,7 +4107,7 @@
           <div class="card-modal-wrap">
             <button class="close icon ghost" id="closeCardModal" title="fechar">✕</button>
             <input type="text" data-ctype="${type}" data-cid="${c.id}" data-cfield="name" value="${esc(c.name)}" placeholder="Nome" style="font-family:'Newsreader',serif; font-size:21px; font-weight:500; padding:6px 0; background:transparent; border:none; border-bottom:1px solid var(--border); border-radius:0; margin-bottom:6px;">
-            <div class="sub">${typeLabel}${c.isProtagonist ? ' · <span style="color:var(--accent);">protagonista</span>' : ''}</div>
+            <div class="sub">${typeLabel}${c.isProtagonist ? ' · <span style="color:var(--accent);">protagonista</span>' : ''}${scenarioMode ? ' · <span style="color:var(--scenario-accent);">modo cenário</span>' : ''}</div>
 
             ${body}
 
@@ -3757,7 +4147,7 @@
 
   function renderTurn(t, i, extraClass){
     const isEditing = editingTurnId === t.id;
-    const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '');
+    const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '') + (t.isOpening ? ' · abertura' : '');
     const extra = extraClass ? ' ' + extraClass : '';
     if (isEditing){
       return `<span class="turn ${t.type}${extra} ${t.archived?'archived':''}" data-turnid="${t.id}">
@@ -3878,7 +4268,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0-preview (v50)</strong> — POV refinado (narração ≠ diálogo) + endpoint normalizado
+          Versão: <strong>1.0</strong>
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -3899,14 +4289,14 @@
             <label>Endpoint do Colab</label>
             <input type="text" id="colabEndpoint" value="${esc(c.colabEndpoint)}" placeholder="https://xxx.trycloudflare.com/v1">
             <div class="summ-note" style="font-size:11px; margin-top:5px;">
-              Cole o link do túnel. Basta terminar com <code>/v1</code> — o app completa <code>/chat/completions</code> sozinho. O link muda a cada reinício do Colab.
+              Cole o link do túnel. Basta terminar com <code>/v1</code> — o app completa <code>/chat/completions</code> sozinho.
             </div>
           </div>
           <div class="field">
             <label>Modelo</label>
             <input type="text" id="colabModel" value="${esc(c.colabModel || 'local-model')}" placeholder="local-model">
             <div class="summ-note" style="font-size:11px; margin-top:5px;">
-              llama-cpp-python ignora esse nome — usa o modelo carregado. Qualquer coisa serve.
+              llama-cpp-python ignora esse nome — usa o modelo carregado.
             </div>
           </div>
           <div class="field">
@@ -3983,30 +4373,58 @@
   }
 
   function renderStoriesModal(){
+    const tab = state.ui.storiesTab || 'stories';
     return `
     <div class="modal-overlay" id="overlayStories">
-      <div class="modal">
+      <div class="modal" style="max-width:620px;">
         <button class="close icon ghost" id="closeStories">✕</button>
-        <h2>Minhas aventuras</h2>
-        ${state.index.map(s => `
-          <div class="story-item">
-            <div class="info">
-              <div class="t">${esc(s.title)}</div>
-              <div class="d">${new Date(s.updatedAt).toLocaleString('pt-BR')}</div>
-            </div>
-            <button data-open="${s.id}">abrir</button>
-            <button class="danger" data-delstory="${s.id}">apagar</button>
-          </div>
-        `).join('') || '<p style="color:var(--muted)">Nenhuma aventura.</p>'}
-        <div class="divider"></div>
-        <div style="display:flex; gap:8px;">
-          <button class="primary" id="btnCreateStory" style="flex:1;">＋ Nova aventura</button>
-          <button id="btnExportStory">Exportar (.json)</button>
-          <label class="button" style="display:inline-flex;align-items:center;">
-            <button id="btnImportTrigger">Importar</button>
-            <input type="file" id="importInput" accept=".json" style="display:none;">
-          </label>
+        <h2 style="margin-bottom:14px;">Biblioteca</h2>
+
+        <div class="modal-tabs">
+          <button class="modal-tab ${tab === 'stories' ? 'active' : ''}" data-storiestab="stories">📚 Aventuras</button>
+          <button class="modal-tab scenarios-tab ${tab === 'scenarios' ? 'active' : ''}" data-storiestab="scenarios">🎬 Cenários</button>
         </div>
+
+        ${tab === 'stories' ? `
+          ${state.index.map(s => `
+            <div class="story-item">
+              <div class="info">
+                <div class="t">${esc(s.title)}</div>
+                <div class="d">${new Date(s.updatedAt).toLocaleString('pt-BR')}</div>
+              </div>
+              <button data-open="${s.id}">abrir</button>
+              <button class="danger" data-delstory="${s.id}">apagar</button>
+            </div>
+          `).join('') || '<p style="color:var(--muted)">Nenhuma aventura ainda.</p>'}
+          <div class="divider"></div>
+          <div style="display:flex; gap:8px;">
+            <button class="primary" id="btnCreateStory" style="flex:1;">＋ Nova aventura</button>
+            <button id="btnExportStory">Exportar (.json)</button>
+            <label class="button" style="display:inline-flex;align-items:center;">
+              <button id="btnImportTrigger">Importar</button>
+              <input type="file" id="importInput" accept=".json" style="display:none;">
+            </label>
+          </div>
+        ` : `
+          <div class="helpbox" style="margin-bottom:12px;">
+            🎬 Um <strong>cenário</strong> é um template de aventura: fichas, mundo, notas, segredos e (opcionalmente) uma <strong>abertura</strong> — mas sem histórico de turnos.
+            Crie uma vez, use quantas vezes quiser.
+          </div>
+          ${state.scenarioIndex.map(sc => `
+            <div class="story-item scenario-item">
+              <div class="info">
+                <div class="t">${esc(sc.title)}</div>
+                <div class="d">${new Date(sc.updatedAt).toLocaleString('pt-BR')}</div>
+              </div>
+              <button data-edit-scenario="${sc.id}" title="editar cenário">✎</button>
+              <button class="scenario-btn" data-play-scenario="${sc.id}" title="criar aventura com este cenário">▶ jogar</button>
+              <button class="icon" data-dup-scenario="${sc.id}" title="duplicar">⧉</button>
+              <button class="danger" data-del-scenario="${sc.id}" title="apagar">✕</button>
+            </div>
+          `).join('') || '<p style="color:var(--muted)">Nenhum cenário ainda. Crie um pra reusar fichas entre aventuras.</p>'}
+          <div class="divider"></div>
+          <button class="primary scenario-btn" id="btnCreateScenario" style="width:100%;">＋ Novo cenário</button>
+        `}
       </div>
     </div>`;
   }
@@ -4020,8 +4438,10 @@
 
     const titleField = $('#titleField');
     if (titleField) titleField.addEventListener('blur', e => {
-      state.story.title = e.target.textContent.trim() || 'Sem título';
-      scheduleSave();
+      if (state.story){
+        state.story.title = e.target.textContent.trim() || 'Sem título';
+        scheduleSave();
+      }
     });
 
     const btnStories = $('#btnStories'); if (btnStories) btnStories.onclick = () => { state.ui.modal = 'stories'; render(); };
@@ -4031,8 +4451,24 @@
       render();
     };
     const btnMemory = $('#btnMemory'); if (btnMemory) btnMemory.onclick = () => { state.ui.memoryPanelOpen = true; render(); };
-    const btnCloseMemory = $('#btnCloseMemory'); if (btnCloseMemory) btnCloseMemory.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
-    const memoryBackdrop = $('#memoryBackdrop'); if (memoryBackdrop) memoryBackdrop.onclick = () => { state.ui.memoryPanelOpen = false; render(); };
+    const btnCloseMemory = $('#btnCloseMemory');
+    if (btnCloseMemory) btnCloseMemory.onclick = () => {
+      if (isScenarioMode()){
+        closeScenarioEditor();
+      } else {
+        state.ui.memoryPanelOpen = false;
+        render();
+      }
+    };
+    const memoryBackdrop = $('#memoryBackdrop');
+    if (memoryBackdrop) memoryBackdrop.onclick = () => {
+      if (isScenarioMode()){
+        closeScenarioEditor();
+      } else {
+        state.ui.memoryPanelOpen = false;
+        render();
+      }
+    };
     const btnNew = $('#btnNew'); if (btnNew) btnNew.onclick = createStory;
     const btnLayoutToggle = $('#btnLayoutToggle');
     if (btnLayoutToggle) btnLayoutToggle.onclick = () => {
@@ -4049,9 +4485,14 @@
     });
 
     const bind = (id, ev, fn) => { const e = $(id); if (e) e.addEventListener(ev, fn); };
-    bind('#memWorld','input', e => { state.story.memory.world = e.target.value; scheduleSave(); });
-    bind('#memNote','input', e => { state.story.memory.authorNote = e.target.value; scheduleSave(); });
-    bind('#memSecrets','input', e => { state.story.memory.secrets = e.target.value; scheduleSave(); });
+    bind('#memWorld','input', e => { const m = currentMemory(); if (m){ m.world = e.target.value; scheduleSave(); } });
+    bind('#memNote','input', e => { const m = currentMemory(); if (m){ m.authorNote = e.target.value; scheduleSave(); } });
+    bind('#memSecrets','input', e => { const m = currentMemory(); if (m){ m.secrets = e.target.value; scheduleSave(); } });
+
+    // Abertura (opening) do cenário
+    bind('#scenarioOpening','input', e => {
+      if (state.scenario){ state.scenario.opening = e.target.value; scheduleScenarioSave(); }
+    });
 
     $$('input[name="lang"]').forEach(r => r.addEventListener('change', e => {
       if (e.target.checked) setLanguage(e.target.value);
@@ -4071,6 +4512,31 @@
     bind('#pendingSummaryText','input', e => {
       if (state.ui.pendingSummary) state.ui.pendingSummary.text = e.target.value;
     });
+    bind('#btnSaveAsScenario','click', saveCurrentAsScenario);
+
+    // Cenário (banner)
+    bind('#btnRenameScenario','click', async () => {
+      if (!state.scenario) return;
+      const t = window.prompt('Novo nome do cenário:', state.scenario.title);
+      if (t === null) return;
+      state.scenario.title = (t || '').trim() || state.scenario.title;
+      scheduleScenarioSave();
+      render();
+    });
+    bind('#btnDuplicateScenario','click', async () => {
+      if (!state.scenario) return;
+      const ok = window.confirm('Duplicar este cenário?');
+      if (!ok) return;
+      const id = state.scenario.id;
+      closeScenarioEditor();
+      await duplicateScenario(id);
+    });
+    bind('#btnNewStoryFromScenario','click', () => {
+      if (!state.scenario) return;
+      state.ui.newAdventureModal = { title: '', scenarioId: state.scenario.id };
+      render();
+    });
+
     $$('[data-chapterdel]').forEach(b => b.onclick = () => removeChapter(b.dataset.chapterdel));
     $$('[data-chapterfield]').forEach(inp => inp.addEventListener('input', e => {
       updateChapter(e.target.dataset.chapterid2, e.target.dataset.chapterfield, e.target.value);
@@ -4164,6 +4630,32 @@
       const chk = el.querySelector('[data-extract-id]');
       if (chk) toggleExtractSelection(chk.dataset.extractId);
     }));
+
+    // Modal nova aventura
+    bind('#closeNewAdventure','click', () => { state.ui.newAdventureModal = null; render(); });
+    bind('#btnNewAdvCancel','click', () => { state.ui.newAdventureModal = null; render(); });
+    bind('#btnNewAdvCreate','click', async () => {
+      const t = (document.getElementById('newAdvTitle') || {}).value || '';
+      const sid = (document.getElementById('newAdvScenario') || {}).value || '';
+      await createStoryFromScenario(sid || null, t.trim() || null);
+    });
+    // Atualiza o aviso "tem abertura" quando troca o cenário no dropdown
+    const newAdvSelect = $('#newAdvScenario');
+    if (newAdvSelect){
+      newAdvSelect.addEventListener('change', (e) => {
+        if (state.ui.newAdventureModal){
+          state.ui.newAdventureModal.scenarioId = e.target.value;
+          // Preserva o título digitado
+          const tInput = document.getElementById('newAdvTitle');
+          if (tInput) state.ui.newAdventureModal.title = tInput.value;
+          render();
+        }
+      });
+    }
+    const newAdvOverlay = $('#newAdventureOverlay');
+    if (newAdvOverlay) newAdvOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'newAdventureOverlay'){ state.ui.newAdventureModal = null; render(); }
+    });
 
     $$('.spine .tab').forEach(t => t.onclick = () => rewindTo(t.dataset.jump));
     $$('[data-turntap]').forEach(el => el.addEventListener('click', (e) => {
@@ -4292,12 +4784,31 @@
 
     bind('#closeStories','click', () => { state.ui.modal = null; render(); });
     bind('#overlayStories','click', (e) => { if (e.target.id === 'overlayStories'){ state.ui.modal = null; render(); } });
+
+    $$('[data-storiestab]').forEach(b => b.onclick = () => {
+      state.ui.storiesTab = b.dataset.storiestab;
+      render();
+    });
+
     bind('#btnCreateStory','click', createStory);
+    bind('#btnCreateScenario','click', createScenario);
     bind('#btnExportStory','click', exportStory);
     bind('#btnImportTrigger','click', () => document.getElementById('importInput').click());
     bind('#importInput','change', e => { if (e.target.files && e.target.files[0]) importStory(e.target.files[0]); });
     $$('[data-open]').forEach(b => b.onclick = () => { loadStory(b.dataset.open); state.ui.modal = null; });
     $$('[data-delstory]').forEach(b => b.onclick = () => deleteStory(b.dataset.delstory));
+
+    // Cenários (ações na lista)
+    $$('[data-edit-scenario]').forEach(b => b.onclick = () => {
+      state.ui.modal = null;
+      openScenarioEditor(b.dataset.editScenario);
+    });
+    $$('[data-play-scenario]').forEach(b => b.onclick = () => {
+      state.ui.newAdventureModal = { title: '', scenarioId: b.dataset.playScenario };
+      render();
+    });
+    $$('[data-dup-scenario]').forEach(b => b.onclick = () => duplicateScenario(b.dataset.dupScenario));
+    $$('[data-del-scenario]').forEach(b => b.onclick = () => deleteScenario(b.dataset.delScenario));
   }
 
   async function runDebugVectorSearch(){

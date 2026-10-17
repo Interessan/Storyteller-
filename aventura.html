@@ -204,7 +204,6 @@
   .nudge-banner button{ font-size:11px; padding:6px 11px; }
   .summ-note.err{ color:#f0c9c2; }
 
-  /* Abertura (opening) em destaque no modo cenário */
   .memory-panel.scenario-mode #scenarioOpening {
     min-height: 150px;
     border-color: rgba(212,169,96,0.35);
@@ -860,6 +859,44 @@
     }, 500);
   }
 
+  // Migra dados locais (localStorage) pro Drive se o Drive estava vazio.
+  // Só roda na primeira conexão. Não sobrescreve dados já existentes no Drive.
+  async function migrateLocalToDriveIfEmpty(){
+    const store = state.drive.store || {};
+    const hasStories = Array.isArray(store['stories:index']) && store['stories:index'].length;
+    const hasScenarios = Array.isArray(store['scenarios:index']) && store['scenarios:index'].length;
+    if (hasStories || hasScenarios) return; // Drive já tem dados, não migra
+
+    const SKIP = new Set(['googleClientId', 'forcedLayout', 'driveWasSignedIn']);
+    const migrated = {};
+    try{
+      for (let i = 0; i < localStorage.length; i++){
+        const fullKey = localStorage.key(i);
+        if (!fullKey || !fullKey.startsWith('aventura:')) continue;
+        const shortKey = fullKey.slice('aventura:'.length);
+        if (SKIP.has(shortKey)) continue;
+        if (shortKey.startsWith('vectorSync:')) continue; // metadata local-only
+        try{
+          migrated[shortKey] = JSON.parse(localStorage.getItem(fullKey));
+        }catch(e){ /* ignora entradas corrompidas */ }
+      }
+    }catch(e){
+      console.warn('Migration: erro lendo localStorage', e);
+      return;
+    }
+
+    const keys = Object.keys(migrated);
+    if (!keys.length) return;
+
+    for (const k of keys) state.drive.store[k] = migrated[k];
+    try{
+      await driveWriteFile(state.drive.fileId, state.drive.store);
+      updateStatus('Dados locais migrados pro Drive ✓ (' + keys.length + ' item' + (keys.length > 1 ? 's' : '') + ')', false);
+    }catch(e){
+      console.warn('Migration: erro escrevendo no Drive', e);
+    }
+  }
+
   function initGoogleTokenClient(){
     if (!state.drive.clientId || typeof google === 'undefined' || !google.accounts) return;
     state.drive.tokenClient = google.accounts.oauth2.initTokenClient({
@@ -879,6 +916,7 @@
         render();
         try{
           await ensureDriveLoaded();
+          await migrateLocalToDriveIfEmpty();
           await init();
           updateStatus('Conectado ao Google Drive ✓ — os dados agora sincronizam por essa conta.', false);
           if (state.story) syncVectorsWithDrive(state.story.id).catch(() => {});
@@ -978,7 +1016,12 @@
       extractPicker: { open: false, selectedIds: [], loading: false, error: null },
       scenarioEditorOpen: false,
       storiesTab: 'stories',
-      newAdventureModal: null
+      newAdventureModal: null,
+      retryGuidanceOpen: false,
+      retryGuidanceText: '',
+      editingDraft: null,
+      undoStack: [],
+      redoStack: []
     }
   };
 
@@ -1021,7 +1064,6 @@
     return selected;
   }
 
-  // ============ MEMÓRIA PADRÃO + CENÁRIO ============
   function blankMemory(){
     return {
       persona: '',
@@ -1033,7 +1075,8 @@
       characters: [],
       locations: [],
       groups: [],
-      secrets: ''
+      secrets: '',
+      chapters: []
     };
   }
 
@@ -1068,6 +1111,23 @@
 
   function isScenarioMode(){
     return state.ui.scenarioEditorOpen && !!state.scenario;
+  }
+
+  // Zera TODA a UI específica da aventura. Chamada ao trocar/criar/importar/apagar aventura.
+  function resetStoryUiState(){
+    state.ui.expandedCard = null;
+    state.ui.pendingSummary = null;
+    state.ui.pendingUpdates = null;
+    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
+    state.ui.composerText = '';
+    state.ui.openActionsFor = null;
+    state.ui.newAdventureModal = null;
+    state.ui.scenarioEditorOpen = false;
+    state.scenario = null;
+    state.ui.undoStack = [];
+    state.ui.redoStack = [];
+    state.ui.editingDraft = null;
+    editingTurnId = null;
   }
 
   // ========================================================================
@@ -1235,6 +1295,28 @@
     }catch(e){ /* silencioso */ }
   }
 
+  // Atualiza só o flag "archived" do vetor (usado quando turno é arquivado/desarquivado).
+  async function updateVectorArchived(turnId, archived){
+    try{
+      const db = await openVectorDb();
+      await new Promise((resolve) => {
+        const tx = db.transaction(VECTOR_STORE, 'readwrite');
+        const store = tx.objectStore(VECTOR_STORE);
+        const getReq = store.get(turnId);
+        getReq.onsuccess = () => {
+          const item = getReq.result;
+          if (item){
+            item.archived = !!archived;
+            item.updatedAt = Date.now();
+            store.put(item);
+          }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    }catch(e){ /* silencioso */ }
+  }
+
   function cosineSimilarity(a, b){
     if (!a || !b || a.length !== b.length) return 0;
     let dot = 0, na = 0, nb = 0;
@@ -1279,7 +1361,8 @@
                 score: cosineSimilarity(queryVector, item.vector)
               };
             })
-            .filter(item => item.score > threshold && item.text)
+            // Arquivados ficam no índice (podem voltar se desarquivados), mas não aparecem aqui.
+            .filter(item => item.score > threshold && item.text && !item.archived)
             .sort((a, b) => b.score - a.score)
             .slice(0, topK);
           resolve(scored);
@@ -1298,6 +1381,20 @@
       return new Promise((resolve) => {
         const tx = db.transaction(VECTOR_STORE, 'readonly');
         const req = tx.objectStore(VECTOR_STORE).count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(0);
+      });
+    }catch(e){ return 0; }
+  }
+
+  async function countStoryVectors(storyId){
+    if (!storyId) return 0;
+    try{
+      const db = await openVectorDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(VECTOR_STORE, 'readonly');
+        const idx = tx.objectStore(VECTOR_STORE).index('storyId');
+        const req = idx.count(storyId);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(0);
       });
@@ -1521,25 +1618,35 @@
   }
 
   async function syncVectorsWithDrive(storyId){
-    if (!state.drive.signedIn) return;
+    if (!storyId) return;
+    // Sem Drive: sincroniza local mesmo assim.
+    if (!state.drive.signedIn){
+      await syncStoryVectors({ storyId });
+      return;
+    }
     const downloaded = await downloadVectorsFromDrive(storyId);
     if (!downloaded){
-      await syncStoryVectors();
+      await syncStoryVectors({ storyId });
     } else {
-      await syncStoryVectors({ skipExisting: true });
+      await syncStoryVectors({ storyId });
     }
   }
 
   async function syncStoryVectors(opts){
     opts = opts || {};
+    const storyId = opts.storyId || (state.story ? state.story.id : null);
+    if (!storyId) return;
+    // Se um storyId específico foi pedido mas o estado atual é outro (troca de aventura
+    // durante setTimeout de loadStory), aborta pra não indexar a aventura errada.
+    if (opts.storyId && state.story && opts.storyId !== state.story.id) return;
     const s = state.story;
-    if (!s) return;
+    if (!s || s.id !== storyId) return;
     try{
       const db = await openVectorDb();
       const existingIds = await new Promise((resolve) => {
         const tx = db.transaction(VECTOR_STORE, 'readonly');
         const idx = tx.objectStore(VECTOR_STORE).index('storyId');
-        const req = idx.getAll(s.id);
+        const req = idx.getAll(storyId);
         req.onsuccess = () => resolve(new Set((req.result || []).map(it => it.turnId)));
         req.onerror = () => resolve(new Set());
       });
@@ -1550,8 +1657,13 @@
         if (!currentIds.has(id)) toRemove.push(id);
       }
       if (toRemove.length){
-        const tx = db.transaction(VECTOR_STORE, 'readwrite');
-        toRemove.forEach(id => tx.objectStore(VECTOR_STORE).delete(id));
+        await new Promise((resolve) => {
+          const tx = db.transaction(VECTOR_STORE, 'readwrite');
+          const store = tx.objectStore(VECTOR_STORE);
+          toRemove.forEach(id => store.delete(id));
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        });
       }
 
       const missing = s.turns.filter(t => !existingIds.has(t.id));
@@ -1568,7 +1680,7 @@
       }
 
       state.ui.vectorIndexing = 0;
-      state.ui.vectorCount = await countVectors();
+      state.ui.vectorCount = await countStoryVectors(storyId);
       render();
     }catch(e){
       console.warn('syncStoryVectors failed:', e);
@@ -1597,7 +1709,7 @@
     } else if (state.index.length){
       await loadStory(state.index[0].id);
     } else {
-      const s = newStory('Minha primeira aventura');
+      const s = normalizeStory(newStory('Minha primeira aventura'));
       state.story = s;
       state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
       await sSet('story:' + s.id, s);
@@ -1620,7 +1732,7 @@
     if (typeof m.summary !== 'string') m.summary = '';
     if (typeof m.language !== 'string') m.language = 'pt-BR';
     if (typeof m.languageCustom !== 'string') m.languageCustom = '';
-    if (!m.chapters) m.chapters = [];
+    if (!Array.isArray(m.chapters)) m.chapters = [];
     m.chapters.forEach(ch => {
       if (!Array.isArray(ch.archivedTurnIds)) ch.archivedTurnIds = [];
     });
@@ -1692,12 +1804,9 @@
   }
 
   async function loadStory(id){
+    resetStoryUiState();
     const s = await sGet('story:' + id);
     if (s){ state.story = normalizeStory(s); await sSet('settings:lastOpen', id); }
-    state.ui.expandedCard = null;
-    state.ui.pendingSummary = null;
-    state.ui.pendingUpdates = null;
-    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
     render();
     scrollFeedToBottom();
     if (window.indexedDB){
@@ -1877,15 +1986,16 @@
     if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()){
       return 'IDIOMA E ESTILO DA NARRAÇÃO: ' + mem.languageCustom.trim();
     }
-    return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em português brasileiro. É OBRIGATÓRIO: nunca misture palavras em inglês — nem "floor", nem "speak", nem "those eyes", nem qualquer outra. Se um termo não existe em português, use a tradução mais próxima ou adapte naturalmente dentro da frase em português.';
+    // Reformulado: sem exemplos negativos (evita priming)
+    return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em português brasileiro contemporâneo, com naturalidade. Se um termo não existir em português, use a tradução mais próxima ou adapte a frase.';
   }
 
   function buildLanguageReminder(mem){
     const lang = mem.language || 'pt-BR';
-    if (lang === 'en') return ' Escreva toda a narração em inglês.';
-    if (lang === 'pt-en') return ' Narração em português, com inglês ocasional se fizer sentido.';
-    if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()) return ' Siga a instrução de idioma/estilo definida na memória.';
-    return ' Narração em português brasileiro, sem palavras em inglês.';
+    if (lang === 'en') return ' Narração em inglês.';
+    if (lang === 'pt-en') return ' Narração em PT-BR com inglês ocasional se fizer sentido.';
+    if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()) return ' Siga a instrução de idioma/estilo da memória.';
+    return ' Narração em português brasileiro.';
   }
 
   function buildVectorMemoryBlock(memories){
@@ -2093,12 +2203,17 @@
       });
     }
 
+    // Remove marcadores órfãos que possam ter sobrado (inclusive no meio de linhas).
     cleaned = cleaned.split('\n').filter(l => {
       const lt = l.trim();
       if (/^\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:/i.test(lt)) return false;
       if (/^\[[A-Za-z]\d{1,4}\]\s*$/.test(lt)) return false;
       return true;
-    }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }).join('\n');
+    // Também remove no meio de linhas (defesa em profundidade)
+    cleaned = cleaned.replace(/\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:[^\n]*/gi, '');
+    cleaned = cleaned.replace(/\[[A-Za-z]\d{1,4}\]/g, '');
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
 
     return { cleaned, updates };
   }
@@ -2134,30 +2249,24 @@
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
     const languageLine = buildLanguageInstruction(s.memory);
 
+    // POV reformulado — sem exemplos "ERRADO" (que podem ser copiados).
     const povLine = [
-      'PONTO DE VISTA (POV) — REGRA CRÍTICA, LEIA COM ATENÇÃO:',
+      'PONTO DE VISTA (POV) — REGRA CRÍTICA:',
       '',
-      '1) A NARRAÇÃO é em PRIMEIRA PESSOA DO PRESENTE — o texto que descreve o que acontece é a voz do próprio protagonista narrando ("eu ando", "eu vejo", "eu paro"). O protagonista é SEMPRE "eu" NA NARRAÇÃO. Nunca use "você", "ele", "ela" nem o nome próprio pra se referir ao protagonista na narração.' + (protagName ? (' Nunca escreva "' + protagName + ' faz" nem "ela faz" — sempre "eu faço".') : ''),
+      'A NARRAÇÃO é em PRIMEIRA PESSOA DO PRESENTE — o texto que descreve o que acontece é a voz do próprio protagonista. O protagonista é SEMPRE "eu" NA NARRAÇÃO.' + (protagName ? (' Se o nome dela é ' + protagName + ', nunca escreva "' + protagName + ' faz" nem "ela faz" pra se referir a ela na narração — sempre "eu faço".') : '') + ' Exemplo: "Eu entro na sala e vejo o General."',
       '',
-      '2) O DIÁLOGO (falas dentro de aspas ou depois de travessão) segue regras NORMAIS. Quando OUTRO personagem fala DIRETAMENTE COM a protagonista, ele usa "você" (ou o nome dela), porque está falando com ela, não narrando sobre ela.' + (protagName ? (' Se o nome dela é ' + protagName + ', outro personagem pode dizer "' + protagName + ', venha aqui" ou "Você está bem?" — os dois estão certos.') : ''),
+      'O DIÁLOGO (falas dentro de aspas ou depois de travessão) segue regras NORMAIS. Quando OUTRO personagem fala DIRETAMENTE COM a protagonista, ele usa "você" (ou o nome dela), porque está falando com ela, não narrando sobre ela.' + (protagName ? (' Se o nome dela é ' + protagName + ', outro personagem pode dizer "' + protagName + ', venha aqui" ou "Você está bem?" — os dois estão certos.') : '') + ' Exemplo: \'Ele pergunta: "Você tem dezoito anos?"\'',
       '',
-      '3) Outros personagens continuam em TERCEIRA PESSOA tanto na narração quanto no diálogo sobre eles ("ele diz", "ela sorri", "o General entra"). Só o protagonista é "eu" na narração.',
-      '',
-      'EXEMPLOS — PRESTE ATENÇÃO NA DIFERENÇA:',
-      'ERRADO (narração em 2ª pessoa): "Você entra na sala e vê o General."',
-      'CERTO  (narração em 1ª pessoa): "Eu entro na sala e vejo o General."',
-      '',
-      'ERRADO (outro personagem tratando a protagonista como 3ª pessoa): \'Ele pergunta: "Ela tem dezoito anos?"\' — errado porque ele está falando COM ela, não sobre ela.',
-      'CERTO  (outro personagem tratando a protagonista por "você"): \'Ele pergunta: "Você tem dezoito anos?"\'',
+      'Outros personagens continuam em TERCEIRA PESSOA tanto na narração quanto no diálogo sobre eles. Exemplo: "Ele diz baixinho, os olhos cinzentos me observando."',
       '',
       'RESUMO:',
       '- Narração: protagonista = "eu".',
       '- Diálogo do outro personagem COM a protagonista = "você" (ou o nome dela).',
-      '- Diálogo/nação sobre outros personagens = terceira pessoa ("ele", "ela", nome).',
-      '- NUNCA use "você" pra narrar a ação do protagonista. NUNCA use "ela"/"ele" pra se referir à protagonista num diálogo dirigido a ela.'
+      '- Diálogo/nação sobre outros personagens = terceira pessoa ("ele", "ela", nome).'
     ].join('\n');
 
-    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos ou ênfase — escreva direto "ele sorri" dentro do próprio parágrafo. Falas em discurso direto usam só aspas ou travessão.';
+    // formatLine corrigido: exemplos em 1ª e 3ª pessoa lado a lado, sem virar "regra de 3ª".
+    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos ou ênfase — a ação fica dentro do próprio parágrafo (ex: "Eu sorrio pra ele" quando é o protagonista; "Ele sorri de volta" quando é outro personagem). Falas em discurso direto usam só aspas ou travessão.';
 
     const voiceBlock = (protagCard && (protagCard.narrativeVoice || protagCard.voiceExample)) ? [
       'VOZ DA NARRAÇÃO — ISTO É O MAIS IMPORTANTE PRA IMERSÃO:',
@@ -2169,7 +2278,10 @@
       '- Emoções vêm pela FORMA como ela descreve o mundo, não por ela anunciar ("estou com medo").',
       '- O jeito dela olhar as coisas colore TUDO: ação, paisagem, diálogo.',
       '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem.'
-    ].filter(Boolean).join('\n') : '';
+    ].filter(Boolean).join('\n') 
+    : (protagName 
+        ? ('VOZ DA NARRAÇÃO: a história é narrada PELA ' + protagName + ', então cada palavra precisa soar como ela pensaria, sentiria, escolheria. Evite narração neutra, formal ou genérica — a voz dela colore ação, paisagem e diálogo o tempo todo.')
+        : 'VOZ DA NARRAÇÃO: escreva como se fosse a voz interna do protagonista — subjetiva, com a personalidade dele/dela, evitando narração neutra.');
 
     const omitUpdatesInstruction = !!opts.omitUpdatesInstruction;
     const updatesInstruction = omitUpdatesInstruction ? '' : buildUpdatesInstruction(s.memory.characters || []);
@@ -2211,11 +2323,15 @@
     });
 
     const voiceShort = (protagCard && protagCard.narrativeVoice)
-      ? (' Voz dela: ' + protagCard.narrativeVoice.split(/[.!?]/)[0].slice(0, 110).trim() + '.')
+      ? (() => {
+          const v = protagCard.narrativeVoice.split(/[.!?]/)[0].trim().slice(0, 110);
+          return v && /[a-zA-ZÀ-ú]/.test(v) ? (' Voz dela: ' + v + '.') : '';
+        })()
       : '';
     const langReminder = buildLanguageReminder(s.memory);
     const updatesReminder = omitUpdatesInstruction ? '' : ' Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.';
-    const povReminder = '[Lembrete interno: continue a narração em PRIMEIRA PESSOA ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' Lembre: na NARRAÇÃO o protagonista é sempre "eu" (nunca "você"/"ela"/"ele"). Mas no DIÁLOGO, outros personagens falam DIRETO com a protagonista usando "você" — eles NÃO devem tratá-la em terceira pessoa quando falam com ela.' + updatesReminder + ']';
+    // Marcador `[Lembrete: ...]` — casa com o padrão que o system prompt manda ignorar.
+    const povReminder = '[Lembrete: ' + 'continue a narração em PRIMEIRA PESSOA ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' No DIÁLOGO, outros personagens falam DIRETO com a protagonista usando "você".' + updatesReminder + ']';
     if (opts.isContinue){
       messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
@@ -2276,7 +2392,8 @@
     let t = text.trim();
     const tail = (promptTail || '').trim().slice(-80);
     if (tail && t.startsWith(tail)) t = t.slice(tail.length).trim();
-    t = t.replace(/^(###|>>>|AI:|Narrador:)\s*/i, '').trim();
+    // Limpa prefixos que o modelo possa ter ecoado
+    t = t.replace(/^(\[JOGADOR\]:?|###|>>>|AI:|Narrador:)\s*/i, '').trim();
     return t;
   }
 
@@ -2331,7 +2448,8 @@
     const c = activeConnector();
     const sys = messages.find(m => m.role === 'system');
     const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
-    const storyBody = history.map(m => m.role === 'user' ? ('> ' + m.content) : m.content).join('\n\n');
+    // Prefixo [JOGADOR] em vez de "> " — menos propenso a ser ecoado como citação.
+    const storyBody = history.map(m => m.role === 'user' ? ('[JOGADOR]: ' + m.content) : m.content).join('\n\n');
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
@@ -2398,9 +2516,14 @@
     const conn = activeConnector();
     const characters = state.story.memory.characters || [];
 
-    const useTwoPhase = (conn.mode === 'horde' || conn.mode === 'colab')
-      && ((conn.updatesTokenBudget || 0) > 0)
-      && characters.length > 0;
+    // Distinguimos 3 cenários:
+    //   - noUpdates: usuário NÃO quer updates automáticos (reserva 0 ou sem personagens)
+    //   - twoPhase: updates em chamada separada (Horde/Colab)
+    //   - singleCallWithUpdates: updates na mesma chamada (OpenAI-compatible)
+    const wantAutoUpdates = ((conn.updatesTokenBudget || 0) > 0) && characters.length > 0;
+    const canTwoPhase = (conn.mode === 'horde' || conn.mode === 'colab');
+    const useTwoPhase = canTwoPhase && wantAutoUpdates;
+    const singleCallWithUpdates = !canTwoPhase && wantAutoUpdates;
 
     let narrationResult;
     let updates = [];
@@ -2409,14 +2532,24 @@
     let codeMap = {};
 
     const p = await buildPromptMessages(actionText, Object.assign({}, opts, {
-      omitUpdatesInstruction: useTwoPhase
+      omitUpdatesInstruction: !wantAutoUpdates
     }));
     ragUsed = p.ragUsed || 0;
     codeMap = p.codeMap || {};
 
-    narrationResult = await callApi(p.messages, {
-      maxTokens: Math.max(20, conn.maxLength || 250)
-    });
+    // maxTokens da narração:
+    //   - two-phase: exatamente maxLength
+    //   - single-call com updates: maxLength + reserve (pra caber narração + bloco)
+    //   - sem updates: exatamente maxLength
+    const narrationOpts = {};
+    if (singleCallWithUpdates){
+      narrationOpts.maxTokens = (conn.maxLength || 250) + (conn.updatesTokenBudget || 80);
+    } else {
+      narrationOpts.maxTokens = Math.max(20, conn.maxLength || 250);
+    }
+
+    narrationResult = await callApi(p.messages, narrationOpts);
+    const rawTextForDebug = narrationResult.text;
 
     if (useTwoPhase && narrationResult.text){
       updateStatusOnly('Narração pronta — extraindo atualizações de ficha…', false);
@@ -2433,21 +2566,23 @@
         console.warn('Extração de updates (fase 2) falhou:', e);
         updatesError = e.message || String(e);
       }
-    } else if (!useTwoPhase){
+    } else if (singleCallWithUpdates){
       const parsed = extractUpdatesFromText(narrationResult.text, codeMap);
       narrationResult.text = parsed.cleaned;
       updates = parsed.updates || [];
     }
+    // Se !wantAutoUpdates: não extrai nada (prompt não pediu updates)
 
     narrationResult.text = cleanNarrationText(narrationResult.text, narrationResult.cutOff);
     narrationResult.ragUsed = ragUsed;
     narrationResult.updates = updates;
     narrationResult.updatesError = updatesError;
     narrationResult.usedTwoPhase = useTwoPhase;
+    narrationResult.usedAutoUpdates = wantAutoUpdates;
 
     state.ui.lastRaw = {
       time: new Date().toLocaleTimeString('pt-BR'),
-      raw: narrationResult.text,
+      raw: rawTextForDebug,
       cleaned: narrationResult.text,
       cutOff: !!narrationResult.cutOff,
       wasEmptied: !narrationResult.text || !narrationResult.text.trim()
@@ -2498,14 +2633,16 @@
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
     t = t.replace(/\[Lembrete[^\]]*\]/gi, ' ');
+    t = t.replace(/\[JOGADOR\][:\s]*/gi, ' ');
     t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ');
     t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, ' ');
     t = t.replace(/\(Continue a cena naturalmente[^)]*\)/gi, ' ');
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
     t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
-    t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:.*$/gim, '');
-    t = t.replace(/^\s*\[[A-Za-z]\d{1,4}\]\s*$/gim, '');
+    // Marcadores de update — agora também no meio de linha (defesa extra)
+    t = t.replace(/\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:[^\n]*/gi, '');
+    t = t.replace(/\[[A-Za-z]\d{1,4}\]/g, '');
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -2808,7 +2945,7 @@
       } else {
         note += ' · 📝 sem mudanças';
       }
-    } else if (result.updates && result.updates.length){
+    } else if (result.usedAutoUpdates && result.updates && result.updates.length){
       note += ' · 📝 ' + result.updates.length + ' atualizaç' + (result.updates.length > 1 ? 'ões' : 'ão');
     }
     return note;
@@ -2908,7 +3045,6 @@
     try{
       const opts = {excludeTurnId: t.id};
       if (guidance) opts.guidance = guidance;
-      // Se for continuação OU a abertura (não tem sourceAction), usa isContinue
       if (t.isContinue || (t.isOpening && !t.sourceAction)) opts.isContinue = true;
       const result = await generate(t.sourceAction || '', opts);
       if (!t.alts) t.alts = [t.text];
@@ -2956,6 +3092,7 @@
   }
 
   function rewindTo(turnId){
+    if (state.ui.scenarioEditorOpen) return; // guarda extra
     const s = state.story;
     const idx = s.turns.findIndex(t => t.id === turnId);
     if (idx === -1) return;
@@ -2981,13 +3118,24 @@
   }
 
   let editingTurnId = null;
-  function startEdit(id){ editingTurnId = id; state.ui.openActionsFor = null; render(); }
-  function cancelEdit(){ editingTurnId = null; render(); }
+  function startEdit(id){
+    editingTurnId = id;
+    const t = state.story.turns.find(t => t.id === id);
+    state.ui.editingDraft = { turnId: id, text: t ? t.text : '' };
+    state.ui.openActionsFor = null;
+    render();
+  }
+  function cancelEdit(){
+    editingTurnId = null;
+    state.ui.editingDraft = null;
+    render();
+  }
   function saveEdit(id, val){
     pushUndo('edição de trecho');
     const t = state.story.turns.find(t => t.id === id);
     if (t) t.text = val;
     editingTurnId = null;
+    state.ui.editingDraft = null;
     scheduleSave();
     updateStatus('Edição salva.', false);
     render();
@@ -3072,7 +3220,10 @@
     });
     existingIds.forEach(id => {
       const t = s.turns.find(x => x.id === id);
-      if (t) t.archived = true;
+      if (t){
+        t.archived = true;
+        updateVectorArchived(id, true).catch(() => {});
+      }
     });
     state.ui.pendingSummary = null;
     updateStatus('Resumo aceito.', false);
@@ -3180,7 +3331,10 @@
     if (hasIds && state.story){
       ch.archivedTurnIds.forEach(tid => {
         const t = state.story.turns.find(x => x.id === tid);
-        if (t) t.archived = false;
+        if (t){
+          t.archived = false;
+          updateVectorArchived(tid, false).catch(() => {});
+        }
       });
     }
     mem.chapters = mem.chapters.filter(c => c.id !== id);
@@ -3199,7 +3353,12 @@
     }
     const ok = window.confirm('Desarquivar TODAS as ' + archivedCount + ' falas arquivadas?');
     if (!ok) return;
-    s.turns.forEach(t => { if (t.archived) t.archived = false; });
+    s.turns.forEach(t => {
+      if (t.archived){
+        t.archived = false;
+        updateVectorArchived(t.id, false).catch(() => {});
+      }
+    });
     updateStatus(archivedCount + ' falas desarquivadas.', false);
     scheduleSave();
     render();
@@ -3304,6 +3463,14 @@
   async function deleteScenario(id){
     const ok = window.confirm('Apagar este cenário pra sempre?\n\nAs aventuras criadas a partir dele NÃO são afetadas.');
     if (!ok) return;
+    // Se estamos editando esse cenário, fecha sem salvar (evita "ressuscitar")
+    if (state.scenario && state.scenario.id === id){
+      clearTimeout(scenarioSaveTimer);
+      state.ui.scenarioEditorOpen = false;
+      state.scenario = null;
+      state.ui.memoryPanelOpen = false;
+      state.ui.expandedCard = null;
+    }
     await sDelete('scenario:' + id);
     state.scenarioIndex = state.scenarioIndex.filter(x => x.id !== id);
     await sSet('scenarios:index', state.scenarioIndex);
@@ -3325,8 +3492,8 @@
     updateStatus('Cenário duplicado.', false);
   }
 
-  // Cria uma nova aventura a partir de um cenário (copia memória + título + abertura).
   async function createStoryFromScenario(scenarioId, title){
+    resetStoryUiState();
     let mem = blankMemory();
     let suggestedTitle = title || 'Nova aventura';
     let opening = '';
@@ -3340,9 +3507,8 @@
         if (!title) suggestedTitle = sc.title || 'Nova aventura';
       }
     }
-    const s = newStory(suggestedTitle);
+    const s = normalizeStory(newStory(suggestedTitle));
     s.memory = mem;
-    // A abertura (opening) do cenário vira a primeira narração da aventura.
     if (opening){
       s.turns.push({
         id: uid(),
@@ -3356,20 +3522,13 @@
     }
     state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
     state.story = s;
-    state.ui.expandedCard = null;
-    state.ui.pendingSummary = null;
-    state.ui.pendingUpdates = null;
-    state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
     await sSet('story:' + s.id, s);
     await sSet('stories:index', state.index);
     await sSet('settings:lastOpen', s.id);
-    state.ui.modal = null;
-    state.ui.newAdventureModal = null;
     render();
     scrollFeedToBottom();
   }
 
-  // Salva a memória da aventura atual como um novo cenário (NÃO copia abertura, capítulos, etc).
   async function saveCurrentAsScenario(){
     const s = state.story;
     if (!s) return;
@@ -3378,7 +3537,6 @@
     if (title === null) return;
     const sc = newScenario(title || suggested);
     sc.memory = JSON.parse(JSON.stringify(s.memory));
-    // Zera os capítulos (fazem parte da aventura, não do cenário)
     sc.memory.chapters = [];
     state.scenarioIndex.unshift({id:sc.id, title:sc.title, updatedAt:sc.updatedAt});
     await sSet('scenario:' + sc.id, sc);
@@ -3386,8 +3544,6 @@
     updateStatus('Cenário criado: "' + sc.title + '"', false);
     render();
   }
-
-  // ============ FIM CENÁRIOS ============
 
   async function createStory(){
     state.ui.newAdventureModal = { title: '', scenarioId: '' };
@@ -3419,9 +3575,11 @@
     state.index = state.index.filter(s => s.id !== id);
     await sSet('stories:index', state.index);
     if (state.story && state.story.id === id){
-      if (state.index.length) await loadStory(state.index[0].id);
-      else {
-        const s = newStory('Nova aventura');
+      if (state.index.length){
+        await loadStory(state.index[0].id);
+      } else {
+        resetStoryUiState();
+        const s = normalizeStory(newStory('Nova aventura'));
         state.story = s;
         state.index.unshift({id:s.id, title:s.title, updatedAt:s.updatedAt});
         await sSet('story:' + s.id, s);
@@ -3444,15 +3602,12 @@
     const reader = new FileReader();
     reader.onload = async (e) => {
       try{
+        resetStoryUiState();
         const s = normalizeStory(JSON.parse(e.target.result));
         s.id = uid();
         s.updatedAt = Date.now();
         state.index.unshift({id:s.id, title:s.title || 'Importada', updatedAt:s.updatedAt});
         state.story = s;
-        state.ui.expandedCard = null;
-        state.ui.pendingSummary = null;
-        state.ui.pendingUpdates = null;
-        state.ui.extractPicker = { open: false, selectedIds: [], loading: false, error: null };
         await sSet('story:' + s.id, s);
         await sSet('stories:index', state.index);
         await sSet('settings:lastOpen', s.id);
@@ -3772,7 +3927,7 @@
         </main>
 
         <nav class="spine" title="Clique num ponto pra voltar até ali">
-          ${s ? s.turns.map((t,i) => `<div class="tab ${t.type} ${i===s.turns.length-1?'current':''}" data-jump="${t.id}">${i+1}</div>`).join('') : ''}
+          ${!scenarioMode && s ? s.turns.map((t,i) => `<div class="tab ${t.type} ${i===s.turns.length-1?'current':''}" data-jump="${t.id}">${i+1}</div>`).join('') : ''}
         </nav>
       </div>
 
@@ -3823,7 +3978,7 @@
               <input type="radio" name="lang" value="pt-BR" ${currentLang === 'pt-BR' ? 'checked' : ''}>
               <div class="lo-body">
                 <div class="lo-title">🇧🇷 Português brasileiro</div>
-                <div class="lo-desc">Narração 100% em PT-BR, sem palavras em inglês.</div>
+                <div class="lo-desc">Narração 100% em PT-BR.</div>
               </div>
             </label>
             <label class="lang-option ${currentLang === 'pt-en' ? 'selected' : ''}">
@@ -3870,7 +4025,7 @@
             </div>
             <textarea id="scenarioOpening" rows="7" placeholder="A cena inicial da aventura...&#10;&#10;Ex: A chuva bate forte no para-brisa. O Impala corta a estrada vazia em direção ao letreiro de neon que pisca ao longe.">${esc(scenarioOpening)}</textarea>
             <div class="summ-note" style="font-size:11px; margin-top:6px;">
-              Esse texto vira a <strong>primeira narração</strong> quando você criar uma aventura com este cenário. Depois disso, é você quem toma o controle. Deixe vazio pra começar com a página em branco.
+              Esse texto vira a <strong>primeira narração</strong> quando você criar uma aventura com este cenário. Deixe vazio pra começar com a página em branco.
             </div>
           </div>
         ` : ''}
@@ -4150,8 +4305,12 @@
     const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '') + (t.isOpening ? ' · abertura' : '');
     const extra = extraClass ? ' ' + extraClass : '';
     if (isEditing){
+      // Preserva o conteúdo digitado pelo usuário (draft) em re-renders
+      const draft = (state.ui.editingDraft && state.ui.editingDraft.turnId === t.id)
+        ? state.ui.editingDraft.text
+        : t.text;
       return `<span class="turn ${t.type}${extra} ${t.archived?'archived':''}" data-turnid="${t.id}">
-        <textarea class="turn-editbox" data-editbox="${t.id}" rows="4">${esc(t.text)}</textarea>
+        <textarea class="turn-editbox" data-editbox="${t.id}" rows="4">${esc(draft)}</textarea>
         <span class="actions" style="opacity:1;">
           <button data-save="${t.id}">salvar</button>
           <button data-cancel="${t.id}">cancelar</button>
@@ -4246,16 +4405,14 @@
     const totalSent = (c.maxLength || 250) + updReserve;
     const wordsApprox = Math.max(3, Math.round((c.maxLength || 250) * 0.7));
     const hasChars = (state.story.memory.characters || []).length > 0;
-    const willUseTwoPhase = (c.mode === 'horde' || c.mode === 'colab') && (updReserve > 0) && hasChars;
+    const wantAutoUpdates = updReserve > 0 && hasChars;
+    const canTwoPhase = (c.mode === 'horde' || c.mode === 'colab');
+    const willUseTwoPhase = canTwoPhase && wantAutoUpdates;
 
     const twoPhaseNote = (() => {
-      if (!willUseTwoPhase){
-        if (c.mode === 'colab' || c.mode === 'horde'){
-          if (updReserve <= 0) return 'Zero = sem updates automáticos. Use 🧠 extrair quando quiser.';
-          return '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.';
-        }
-        return 'Chat model: reserva somada à narração. Se a narração estourar, os updates são cortados.';
-      }
+      if (updReserve <= 0) return 'Zero = sem updates automáticos. O prompt não pede updates; use 🧠 extrair quando quiser.';
+      if (!hasChars) return '💡 Cadastre pelo menos um personagem para ativar a extração automática de updates.';
+      if (!canTwoPhase) return 'Chat model: updates vêm na mesma resposta (reserva soma ao limite).';
       if (c.mode === 'horde'){
         return '⚙️ <strong>Horde:</strong> extração em <strong>chamada separada</strong> com ' + updReserve + ' tokens só pra updates. A narração respeita exatamente o limite acima (mas espera 2x na fila).';
       }
@@ -4268,7 +4425,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0</strong>
+          Versão: <strong>1.0.1</strong>
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -4340,7 +4497,7 @@
         <h2>🧠 Memória vetorial (RAG)</h2>
         <div class="helpbox">
           <strong>Status:</strong> ${esc(vectorStatusLabel)}<br>
-          ${state.ui.vectorReady ? `<strong>Trechos indexados:</strong> ${state.ui.vectorCount || 0}` : ''}
+          ${state.ui.vectorReady ? `<strong>Trechos indexados nesta aventura:</strong> ${state.ui.vectorCount || 0}` : ''}
           ${state.ui.vectorIndexing > 0 ? `<br><strong>Indexando…</strong> faltam ${state.ui.vectorIndexing}` : ''}
           <br><br><strong>Drive:</strong>
           ${state.drive.signedIn ? `<br>⤴ Envio: ${esc(lastPush)}<br>⤵ Download: ${esc(lastPull)}` : '<br><em>sem Google</em>'}
@@ -4433,8 +4590,13 @@
     const $ = sel => document.querySelector(sel);
     const $$ = sel => document.querySelectorAll(sel);
 
-    const editboxEl = $('.turn-editbox');
-    if (editboxEl) editboxEl.addEventListener('input', e => autoSizeTextarea(e.target));
+    // Textarea de edição de turno: preserva draft em re-renders + auto-size
+    $$('.turn-editbox').forEach(el => {
+      el.addEventListener('input', e => {
+        state.ui.editingDraft = { turnId: e.target.dataset.editbox, text: e.target.value };
+        autoSizeTextarea(e.target);
+      });
+    });
 
     const titleField = $('#titleField');
     if (titleField) titleField.addEventListener('blur', e => {
@@ -4447,7 +4609,7 @@
     const btnStories = $('#btnStories'); if (btnStories) btnStories.onclick = () => { state.ui.modal = 'stories'; render(); };
     const btnSettings = $('#btnSettings'); if (btnSettings) btnSettings.onclick = async () => {
       state.ui.modal = 'settings';
-      state.ui.vectorCount = await countVectors();
+      state.ui.vectorCount = state.story ? await countStoryVectors(state.story.id) : 0;
       render();
     };
     const btnMemory = $('#btnMemory'); if (btnMemory) btnMemory.onclick = () => { state.ui.memoryPanelOpen = true; render(); };
@@ -4489,7 +4651,6 @@
     bind('#memNote','input', e => { const m = currentMemory(); if (m){ m.authorNote = e.target.value; scheduleSave(); } });
     bind('#memSecrets','input', e => { const m = currentMemory(); if (m){ m.secrets = e.target.value; scheduleSave(); } });
 
-    // Abertura (opening) do cenário
     bind('#scenarioOpening','input', e => {
       if (state.scenario){ state.scenario.opening = e.target.value; scheduleScenarioSave(); }
     });
@@ -4514,7 +4675,6 @@
     });
     bind('#btnSaveAsScenario','click', saveCurrentAsScenario);
 
-    // Cenário (banner)
     bind('#btnRenameScenario','click', async () => {
       if (!state.scenario) return;
       const t = window.prompt('Novo nome do cenário:', state.scenario.title);
@@ -4631,7 +4791,6 @@
       if (chk) toggleExtractSelection(chk.dataset.extractId);
     }));
 
-    // Modal nova aventura
     bind('#closeNewAdventure','click', () => { state.ui.newAdventureModal = null; render(); });
     bind('#btnNewAdvCancel','click', () => { state.ui.newAdventureModal = null; render(); });
     bind('#btnNewAdvCreate','click', async () => {
@@ -4639,13 +4798,11 @@
       const sid = (document.getElementById('newAdvScenario') || {}).value || '';
       await createStoryFromScenario(sid || null, t.trim() || null);
     });
-    // Atualiza o aviso "tem abertura" quando troca o cenário no dropdown
     const newAdvSelect = $('#newAdvScenario');
     if (newAdvSelect){
       newAdvSelect.addEventListener('change', (e) => {
         if (state.ui.newAdventureModal){
           state.ui.newAdventureModal.scenarioId = e.target.value;
-          // Preserva o título digitado
           const tInput = document.getElementById('newAdvTitle');
           if (tInput) state.ui.newAdventureModal.title = tInput.value;
           render();
@@ -4719,7 +4876,7 @@
       updateStatus('Baixando vetores do Drive…', false);
       const ok = await downloadVectorsFromDrive(state.story.id);
       if (ok){
-        state.ui.vectorCount = await countVectors();
+        state.ui.vectorCount = await countStoryVectors(state.story.id);
         updateStatus('Vetores sincronizados.', false);
       } else {
         updateStatus('Nada novo pra baixar.', false);
@@ -4798,7 +4955,6 @@
     $$('[data-open]').forEach(b => b.onclick = () => { loadStory(b.dataset.open); state.ui.modal = null; });
     $$('[data-delstory]').forEach(b => b.onclick = () => deleteStory(b.dataset.delstory));
 
-    // Cenários (ações na lista)
     $$('[data-edit-scenario]').forEach(b => b.onclick = () => {
       state.ui.modal = null;
       openScenarioEditor(b.dataset.editScenario);
@@ -4863,9 +5019,11 @@
   setTimeout(() => {
     initEmbedder()
       .then(async () => {
-        state.ui.vectorCount = await countVectors();
+        if (state.story){
+          state.ui.vectorCount = await countStoryVectors(state.story.id);
+        }
         render();
-        if (state.story && state.drive.signedIn){
+        if (state.story){
           syncVectorsWithDrive(state.story.id).catch(() => {});
         }
       })

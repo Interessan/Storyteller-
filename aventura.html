@@ -859,25 +859,23 @@
     }, 500);
   }
 
-  // Migra dados locais (localStorage) pro Drive se o Drive estava vazio.
-  // Só roda na primeira conexão. Não sobrescreve dados já existentes no Drive.
+  // Faz merge: copia do localStorage pro Drive as chaves que NÃO existem no Drive.
+  // Nunca sobrescreve o que já está no Drive.
   async function migrateLocalToDriveIfEmpty(){
     const store = state.drive.store || {};
-    const hasStories = Array.isArray(store['stories:index']) && store['stories:index'].length;
-    const hasScenarios = Array.isArray(store['scenarios:index']) && store['scenarios:index'].length;
-    if (hasStories || hasScenarios) return; // Drive já tem dados, não migra
-
     const SKIP = new Set(['googleClientId', 'forcedLayout', 'driveWasSignedIn']);
-    const migrated = {};
+    const migratedKeys = [];
     try{
       for (let i = 0; i < localStorage.length; i++){
         const fullKey = localStorage.key(i);
         if (!fullKey || !fullKey.startsWith('aventura:')) continue;
         const shortKey = fullKey.slice('aventura:'.length);
         if (SKIP.has(shortKey)) continue;
-        if (shortKey.startsWith('vectorSync:')) continue; // metadata local-only
+        if (shortKey.startsWith('vectorSync:')) continue;
+        if (shortKey in store) continue; // já existe no Drive, não sobrescreve
         try{
-          migrated[shortKey] = JSON.parse(localStorage.getItem(fullKey));
+          store[shortKey] = JSON.parse(localStorage.getItem(fullKey));
+          migratedKeys.push(shortKey);
         }catch(e){ /* ignora entradas corrompidas */ }
       }
     }catch(e){
@@ -885,16 +883,11 @@
       return;
     }
 
-    const keys = Object.keys(migrated);
-    if (!keys.length) return;
+    if (!migratedKeys.length) return;
 
-    for (const k of keys) state.drive.store[k] = migrated[k];
-    try{
-      await driveWriteFile(state.drive.fileId, state.drive.store);
-      updateStatus('Dados locais migrados pro Drive ✓ (' + keys.length + ' item' + (keys.length > 1 ? 's' : '') + ')', false);
-    }catch(e){
-      console.warn('Migration: erro escrevendo no Drive', e);
-    }
+    // Usa scheduleDriveUpload (respeita debounce; não sobrescreve writes concorrentes)
+    scheduleDriveUpload();
+    updateStatus('Dados locais mesclados ao Drive ✓ (' + migratedKeys.length + ' item' + (migratedKeys.length > 1 ? 's' : '') + ')', false);
   }
 
   function initGoogleTokenClient(){
@@ -992,6 +985,7 @@
       generating: false,
       statusMsg: '',
       statusErr: false,
+      saveWarning: false,
       composerText: '',
       memoryPanelOpen: false,
       memoryTab: 'memory',
@@ -1113,7 +1107,6 @@
     return state.ui.scenarioEditorOpen && !!state.scenario;
   }
 
-  // Zera TODA a UI específica da aventura. Chamada ao trocar/criar/importar/apagar aventura.
   function resetStoryUiState(){
     state.ui.expandedCard = null;
     state.ui.pendingSummary = null;
@@ -1127,6 +1120,9 @@
     state.ui.undoStack = [];
     state.ui.redoStack = [];
     state.ui.editingDraft = null;
+    state.ui.statusMsg = '';
+    state.ui.statusErr = false;
+    state.ui.saveWarning = false;
     editingTurnId = null;
   }
 
@@ -1295,7 +1291,6 @@
     }catch(e){ /* silencioso */ }
   }
 
-  // Atualiza só o flag "archived" do vetor (usado quando turno é arquivado/desarquivado).
   async function updateVectorArchived(turnId, archived){
     try{
       const db = await openVectorDb();
@@ -1361,7 +1356,6 @@
                 score: cosineSimilarity(queryVector, item.vector)
               };
             })
-            // Arquivados ficam no índice (podem voltar se desarquivados), mas não aparecem aqui.
             .filter(item => item.score > threshold && item.text && !item.archived)
             .sort((a, b) => b.score - a.score)
             .slice(0, topK);
@@ -1373,18 +1367,6 @@
       console.warn('searchRelevantTurns failed:', e);
       return [];
     }
-  }
-
-  async function countVectors(){
-    try{
-      const db = await openVectorDb();
-      return new Promise((resolve) => {
-        const tx = db.transaction(VECTOR_STORE, 'readonly');
-        const req = tx.objectStore(VECTOR_STORE).count();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(0);
-      });
-    }catch(e){ return 0; }
   }
 
   async function countStoryVectors(storyId){
@@ -1595,7 +1577,7 @@
       meta.lastPulledAt = Date.now();
       setSyncMeta(storyId, meta);
 
-      state.ui.vectorCount = await countVectors();
+      state.ui.vectorCount = await countStoryVectors(storyId);
       state.ui.vectorDriveStatus = '✓ vetores sincronizados do Drive';
       render();
       setTimeout(() => {
@@ -1619,25 +1601,16 @@
 
   async function syncVectorsWithDrive(storyId){
     if (!storyId) return;
-    // Sem Drive: sincroniza local mesmo assim.
-    if (!state.drive.signedIn){
-      await syncStoryVectors({ storyId });
-      return;
+    if (state.drive.signedIn){
+      await downloadVectorsFromDrive(storyId);
     }
-    const downloaded = await downloadVectorsFromDrive(storyId);
-    if (!downloaded){
-      await syncStoryVectors({ storyId });
-    } else {
-      await syncStoryVectors({ storyId });
-    }
+    await syncStoryVectors({ storyId });
   }
 
   async function syncStoryVectors(opts){
     opts = opts || {};
     const storyId = opts.storyId || (state.story ? state.story.id : null);
     if (!storyId) return;
-    // Se um storyId específico foi pedido mas o estado atual é outro (troca de aventura
-    // durante setTimeout de loadStory), aborta pra não indexar a aventura errada.
     if (opts.storyId && state.story && opts.storyId !== state.story.id) return;
     const s = state.story;
     if (!s || s.id !== storyId) return;
@@ -1871,6 +1844,37 @@
     return (state.story && state.story.connector) ? state.story.connector : state.connector;
   }
 
+  // ============ STOP SEQUENCES (evita vazamento de instruções) ============
+  const NARRATION_STOP_SEQUENCES = [
+    '===UPDATES===',
+    '[c0', '[c1', '[c2', '[c3', '[c4', '[c5',
+    '[c6', '[c7', '[c8', '[c9',
+    '[JOGADOR',
+    'RESUMO:',
+    'FORMATO:',
+    'TAMANHO DA RESPOSTA:',
+    'LEMBRETE FINAL:',
+    'REGRA CRÍTICA DE SAÍDA:',
+    'PONTO DE VISTA',
+    'BLOCO DE ATUALIZAÇÕES',
+    'VOZ DA NARRAÇÃO',
+    'FICHAS DE PERSONAGENS',
+    'LOCAIS (mantenha',
+    'GRUPOS / DINÂMICA FAMILIAR',
+    'RESUMO DOS CAPÍTULOS',
+    'TRECHOS RELEVANTES',
+    'SEGREDOS DO MUNDO',
+    'Notas do autor (siga',
+    'INSTRUÇÃO ESPECÍFICA',
+    'Persona/personagem principal:',
+    'Mundo/cenário:',
+    'Regra geral de conhecimento',
+    'Regra contra "telepatia"',
+    'Continue a história de forma coerente',
+    '\n===',
+    '\n###'
+  ];
+
   function cardTriggerWords(card){
     const triggers = [];
     if (card.name) triggers.push(...card.name.split(/\s+/));
@@ -1986,16 +1990,7 @@
     if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()){
       return 'IDIOMA E ESTILO DA NARRAÇÃO: ' + mem.languageCustom.trim();
     }
-    // Reformulado: sem exemplos negativos (evita priming)
     return 'IDIOMA DA NARRAÇÃO: escreva TODA a narração em português brasileiro contemporâneo, com naturalidade. Se um termo não existir em português, use a tradução mais próxima ou adapte a frase.';
-  }
-
-  function buildLanguageReminder(mem){
-    const lang = mem.language || 'pt-BR';
-    if (lang === 'en') return ' Narração em inglês.';
-    if (lang === 'pt-en') return ' Narração em PT-BR com inglês ocasional se fizer sentido.';
-    if (lang === 'custom' && mem.languageCustom && mem.languageCustom.trim()) return ' Siga a instrução de idioma/estilo da memória.';
-    return ' Narração em português brasileiro.';
   }
 
   function buildVectorMemoryBlock(memories){
@@ -2009,6 +2004,24 @@
     return 'TRECHOS RELEVANTES DA HISTÓRIA (recuperados por similaridade com a ação atual — use como contexto vivo, NÃO repita literalmente nem mencione que "lembrou"):\n' + lines.join('\n\n');
   }
 
+  // Updates instruction enxuta (item 6). Para o bloco de sistema do narrador.
+  function buildUpdatesInstructionShort(characters){
+    if (!characters || !characters.length) return '';
+    const codes = characters.map((c, i) => {
+      const code = 'c' + String(i + 1).padStart(3, '0');
+      return '[' + code + '] ' + (c.name || 'Sem nome');
+    }).join('\n');
+    return [
+      'ATUALIZAÇÕES DE ESTADO (só DEPOIS da narração, no final absoluto):',
+      'Escreva o bloco ===UPDATES=== ... ===END UPDATES=== com linhas [cXXX] campo: valor completo atualizado.',
+      'Campos: relationship | knows | wants | status.',
+      'Só personagens afetados, só campos que mudaram. Se nada mudou, deixe o bloco vazio.',
+      'Códigos:',
+      codes
+    ].join('\n');
+  }
+
+  // Versão completa usada SÓ na extração (fase 2 e multi-turno manual).
   function buildUpdatesInstruction(characters){
     if (!characters || !characters.length) return '';
     const codes = characters.map((c, i) => {
@@ -2203,14 +2216,12 @@
       });
     }
 
-    // Remove marcadores órfãos que possam ter sobrado (inclusive no meio de linhas).
     cleaned = cleaned.split('\n').filter(l => {
       const lt = l.trim();
       if (/^\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:/i.test(lt)) return false;
       if (/^\[[A-Za-z]\d{1,4}\]\s*$/.test(lt)) return false;
       return true;
     }).join('\n');
-    // Também remove no meio de linhas (defesa em profundidade)
     cleaned = cleaned.replace(/\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:[^\n]*/gi, '');
     cleaned = cleaned.replace(/\[[A-Za-z]\d{1,4}\]/g, '');
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
@@ -2249,52 +2260,42 @@
     const protagName = protagCard && protagCard.name ? protagCard.name.trim() : '';
     const languageLine = buildLanguageInstruction(s.memory);
 
-    // POV reformulado — sem exemplos "ERRADO" (que podem ser copiados).
+    // POV em prosa (sem lista com hífen)
     const povLine = [
-      'PONTO DE VISTA (POV) — REGRA CRÍTICA:',
-      '',
-      'A NARRAÇÃO é em PRIMEIRA PESSOA DO PRESENTE — o texto que descreve o que acontece é a voz do próprio protagonista. O protagonista é SEMPRE "eu" NA NARRAÇÃO.' + (protagName ? (' Se o nome dela é ' + protagName + ', nunca escreva "' + protagName + ' faz" nem "ela faz" pra se referir a ela na narração — sempre "eu faço".') : '') + ' Exemplo: "Eu entro na sala e vejo o General."',
-      '',
-      'O DIÁLOGO (falas dentro de aspas ou depois de travessão) segue regras NORMAIS. Quando OUTRO personagem fala DIRETAMENTE COM a protagonista, ele usa "você" (ou o nome dela), porque está falando com ela, não narrando sobre ela.' + (protagName ? (' Se o nome dela é ' + protagName + ', outro personagem pode dizer "' + protagName + ', venha aqui" ou "Você está bem?" — os dois estão certos.') : '') + ' Exemplo: \'Ele pergunta: "Você tem dezoito anos?"\'',
-      '',
-      'Outros personagens continuam em TERCEIRA PESSOA tanto na narração quanto no diálogo sobre eles. Exemplo: "Ele diz baixinho, os olhos cinzentos me observando."',
-      '',
-      'RESUMO:',
-      '- Narração: protagonista = "eu".',
-      '- Diálogo do outro personagem COM a protagonista = "você" (ou o nome dela).',
-      '- Diálogo/nação sobre outros personagens = terceira pessoa ("ele", "ela", nome).'
+      'PONTO DE VISTA: a NARRAÇÃO é em primeira pessoa do presente — o protagonista é sempre "eu" enquanto narra ("Eu entro na sala e vejo o General"). O DIÁLOGO segue regra normal: quando outro personagem fala diretamente com a protagonista, ele usa "você" ou o nome dela (por exemplo, ele pode perguntar "Você tem dezoito anos?"). Outros personagens, tanto na narração quanto no diálogo sobre eles, continuam em terceira pessoa ("ele sorri", "ela responde").'
     ].join('\n');
 
-    // formatLine corrigido: exemplos em 1ª e 3ª pessoa lado a lado, sem virar "regra de 3ª".
-    const formatLine = 'FORMATO: escreva só em prosa corrida, texto puro, sem NENHUMA marcação de markdown. Nunca use asteriscos (* ou **) pra indicar ações, pensamentos ou ênfase — a ação fica dentro do próprio parágrafo (ex: "Eu sorrio pra ele" quando é o protagonista; "Ele sorri de volta" quando é outro personagem). Falas em discurso direto usam só aspas ou travessão.';
+    // Formato + exemplos neutros
+    const formatLine = 'FORMATO: prosa corrida, texto puro, sem markdown nem asteriscos. Ação e fala ficam dentro do parágrafo; falas em discurso direto usam só aspas ou travessão.';
 
     const voiceBlock = (protagCard && (protagCard.narrativeVoice || protagCard.voiceExample)) ? [
-      'VOZ DA NARRAÇÃO — ISTO É O MAIS IMPORTANTE PRA IMERSÃO:',
-      'A história é narrada PELA ' + (protagName || 'protagonista') + ', não por um narrador neutro. Cada palavra do texto precisa soar como ELA pensaria, sentiria, escolheria.',
+      'VOZ DA NARRAÇÃO: a história é narrada PELA ' + (protagName || 'protagonista') + ', não por um narrador neutro. Cada palavra precisa soar como ela pensaria, sentiria, escolheria.',
       protagCard.narrativeVoice ? ('Como ela narra: ' + protagCard.narrativeVoice) : '',
       protagCard.voiceExample ? ('Exemplos do tom dela (IMITE O ESTILO, não copie o conteúdo):\n' + protagCard.voiceExample) : '',
-      'Regras da voz:',
-      '- Vocabulário, ritmo de frase e metáforas que ela usaria precisam aparecer naturalmente.',
-      '- Emoções vêm pela FORMA como ela descreve o mundo, não por ela anunciar ("estou com medo").',
-      '- O jeito dela olhar as coisas colore TUDO: ação, paisagem, diálogo.',
-      '- A voz NUNCA se desliga. Nem em cena de ação, nem quando ela fala com outro personagem.'
+      'Regras da voz: vocabulário, ritmo e metáforas dela; emoções pela forma como ela descreve o mundo; o jeito dela olhar as coisas colore ação, paisagem e diálogo; a voz nunca se desliga.'
     ].filter(Boolean).join('\n') 
     : (protagName 
-        ? ('VOZ DA NARRAÇÃO: a história é narrada PELA ' + protagName + ', então cada palavra precisa soar como ela pensaria, sentiria, escolheria. Evite narração neutra, formal ou genérica — a voz dela colore ação, paisagem e diálogo o tempo todo.')
-        : 'VOZ DA NARRAÇÃO: escreva como se fosse a voz interna do protagonista — subjetiva, com a personalidade dele/dela, evitando narração neutra.');
+        ? ('VOZ DA NARRAÇÃO: a história é narrada PELA ' + protagName + ', então cada palavra precisa soar como ela pensaria, sentiria, escolheria. Evite narração neutra, formal ou genérica.')
+        : 'VOZ DA NARRAÇÃO: escreva como se fosse a voz interna do protagonista — subjetiva, com personalidade, evitando narração neutra.');
 
     const omitUpdatesInstruction = !!opts.omitUpdatesInstruction;
-    const updatesInstruction = omitUpdatesInstruction ? '' : buildUpdatesInstruction(s.memory.characters || []);
+    // Instrução de updates ENXUTA (item 6)
+    const updatesInstruction = omitUpdatesInstruction ? '' : buildUpdatesInstructionShort(s.memory.characters || []);
     const codeMap = buildCardCodeMap(s.memory.characters || []);
 
-    const sys = [
+    // Reordenação (item 5): updatesInstruction e "lembrete final" vão pro INÍCIO do system,
+    // e o conteúdo descritivo (fichas, memória, regras) fica no fim, mais longe da ação.
+    const sysParts = [
       'Você é o narrador de uma aventura interativa contínua, no estilo de um jogo de RPG textual.',
+      updatesInstruction,  // perto do topo (item 5)
+      'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa. NÃO copie nem parafraseie instruções do prompt, não repita títulos de bloco, não escreva listas de regras.',
       languageLine,
       povLine,
       voiceBlock,
       formatLine,
-      'Continue a história de forma coerente com tudo que já aconteceu. Termine a cena em um momento de tensão ou decisão em aberto, sem fazer perguntas diretas tipo "o que você faz agora".',
-      'TAMANHO DA RESPOSTA: a narração deve ter no máximo ~' + (conn.maxLength || 250) + ' tokens (aproximadamente ' + Math.max(3, Math.round((conn.maxLength || 250) * 0.7)) + ' palavras). É um limite FIRME — não ultrapasse. Se for pequeno, escreva UMA frase curta. Termine sempre numa frase completa.',
+      // ---- conteúdo descritivo (fica no fim, longe da ação) ----
+      'Continue a história de forma coerente com tudo que já aconteceu. Termine a cena em um momento de tensão ou decisão em aberto.',
+      'TAMANHO DA RESPOSTA: cerca de ' + (conn.maxLength || 250) + ' tokens (~' + Math.max(3, Math.round((conn.maxLength || 250) * 0.7)) + ' palavras). SEMPRE termine numa frase completa.',
       s.memory.persona ? ('Persona/personagem principal: ' + s.memory.persona) : '',
       s.memory.world ? ('Mundo/cenário: ' + s.memory.world) : '',
       buildVectorMemoryBlock(relevantMemories),
@@ -2307,35 +2308,27 @@
         '\nRegra: nenhum personagem deve demonstrar saber dessas informações antes de descobri-las de fato na história.'
       ) : '',
       'Regra geral de conhecimento: cada personagem só sabe o que está descrito na ficha dele, mais o que já foi mostrado nas cenas anteriores.',
-      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista nem sabem o que ela espera, deseja ou planeja em silêncio — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos descritos na ficha dele.',
+      'Regra contra "telepatia": os personagens NÃO leem a mente da protagonista — só reagem ao que ela de fato diz e faz em voz alta ou de forma visível. Cada personagem age de acordo com a PRÓPRIA personalidade, humor e objetivos.',
       s.memory.authorNote ? ('Notas do autor (siga sempre): ' + s.memory.authorNote) : '',
       opts.guidance ? ('INSTRUÇÃO ESPECÍFICA só pra esta próxima cena (siga à risca): ' + opts.guidance) : '',
-      omitUpdatesInstruction
-        ? 'REGRA CRÍTICA DE SAÍDA: responda APENAS com a narração em prosa. NÃO escreva nada além da narração — sem blocos, sem marcadores, sem comentários. NUNCA copie ou parafraseie instruções do prompt.'
-        : 'REGRA CRÍTICA DE SAÍDA: responda com a narração em prosa, e SÓ depois (no final absoluto) o bloco ===UPDATES===. NUNCA copie ou parafraseie instruções do prompt. Se você vir "[Lembrete: ...]", ignore.',
-      updatesInstruction,
-      'LEMBRETE FINAL: continue exatamente de onde a história parou, reagindo diretamente à última ação do protagonista. Primeira pessoa ("eu") NA NARRAÇÃO, tempo presente, sem asteriscos. Seja breve e SEMPRE termine numa frase completa. Não repita nem resuma o que já aconteceu — apenas continue.'
-    ].filter(Boolean).join('\n\n');
+      'Agora continue a história exatamente de onde ela parou.'
+    ].filter(Boolean);
+
+    const sys = sysParts.join('\n\n');
 
     const messages = [{role:'system', content: sys}];
     liveTurns.forEach(t => {
       messages.push({ role: t.type === 'user' ? 'user' : 'assistant', content: t.text });
     });
 
-    const voiceShort = (protagCard && protagCard.narrativeVoice)
-      ? (() => {
-          const v = protagCard.narrativeVoice.split(/[.!?]/)[0].trim().slice(0, 110);
-          return v && /[a-zA-ZÀ-ú]/.test(v) ? (' Voz dela: ' + v + '.') : '';
-        })()
-      : '';
-    const langReminder = buildLanguageReminder(s.memory);
-    const updatesReminder = omitUpdatesInstruction ? '' : ' Lembre-se de fechar com o bloco ===UPDATES=== no final absoluto.';
-    // Marcador `[Lembrete: ...]` — casa com o padrão que o system prompt manda ignorar.
-    const povReminder = '[Lembrete: ' + 'continue a narração em PRIMEIRA PESSOA ("eu"), tempo presente, prosa corrida, sem asteriscos, com a voz de ' + (protagName || 'a protagonista') + '.' + voiceShort + langReminder + ' No DIÁLOGO, outros personagens falam DIRETO com a protagonista usando "você".' + updatesReminder + ']';
+    // Reminder curto como SYSTEM extra (item 2 + 26), não como prefixo da ação.
+    const shortReminder = '[1ª pessoa, presente, PT-BR.]';
     if (opts.isContinue){
-      messages.push({role:'user', content: povReminder + '\n\n(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
+      messages.push({role:'system', content: shortReminder});
+      messages.push({role:'user', content: '(Continue a cena naturalmente a partir daqui, sem introduzir uma nova ação explícita do protagonista — apenas dê continuidade ao que já está acontecendo.)', isContinueMarker:true});
     } else {
-      messages.push({role:'user', content: povReminder + '\n\n' + actionText});
+      messages.push({role:'system', content: shortReminder});
+      messages.push({role:'user', content: actionText});
     }
     return {messages, sys, liveTurns, ragUsed: relevantMemories.length, codeMap};
   }
@@ -2392,8 +2385,12 @@
     let t = text.trim();
     const tail = (promptTail || '').trim().slice(-80);
     if (tail && t.startsWith(tail)) t = t.slice(tail.length).trim();
-    // Limpa prefixos que o modelo possa ter ecoado
-    t = t.replace(/^(\[JOGADOR\]:?|###|>>>|AI:|Narrador:)\s*/i, '').trim();
+    // Loop de remoção de prefixo (item 18)
+    const prefixRe = /^(?:\[JOGADOR\]:?|###\s*\w*:?|>>>|AI:|Narrador:)\s*/i;
+    let guard = 0;
+    while (prefixRe.test(t) && guard++ < 10){
+      t = t.replace(prefixRe, '').trim();
+    }
     return t;
   }
 
@@ -2408,7 +2405,13 @@
     const maxTokens = computeGenLength(c, opts);
     const headers = {'Content-Type':'application/json'};
     if (cfg.key) headers['Authorization'] = 'Bearer ' + cfg.key;
-    const reqBody = { model: cfg.model, messages, max_tokens: maxTokens, temperature };
+    const reqBody = {
+      model: cfg.model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+      stop: NARRATION_STOP_SEQUENCES
+    };
     let res, data;
     try{
       res = await fetch(cfg.endpoint, { method:'POST', headers, body: JSON.stringify(reqBody) });
@@ -2447,20 +2450,28 @@
     opts = opts || {};
     const c = activeConnector();
     const sys = messages.find(m => m.role === 'system');
+    // Pega só a PRIMEIRA mensagem system (a principal), ignora reminders curtos.
     const history = messages.filter(m => m.role !== 'system' && !m.isContinueMarker);
-    // Prefixo [JOGADOR] em vez de "> " — menos propenso a ser ecoado como citação.
     const storyBody = history.map(m => m.role === 'user' ? ('[JOGADOR]: ' + m.content) : m.content).join('\n\n');
     const promptText = (sys ? sys.content + '\n\n---\n\n' : '') + storyBody + '\n\n';
 
     const temperature = (typeof opts.temperature === 'number') ? opts.temperature : c.temperature;
-    const genLength = (typeof opts.maxTokens === 'number') ? opts.maxTokens : computeGenLength(c, opts);
+    const genLength = computeGenLength(c, opts);
     const estimatedPromptTokens = Math.ceil(promptText.length / 3.2);
     const maxContextLength = Math.min(16384, Math.max(2048, estimatedPromptTokens + genLength + 512));
     const queueMsg = opts.queueMsg || 'Na fila do AI Horde… isso pode levar um tempinho.';
 
     const body = {
       prompt: promptText,
-      params: { n: 1, max_context_length: maxContextLength, max_length: genLength, temperature, rep_pen: 1.1, top_p: 0.92 },
+      params: {
+        n: 1,
+        max_context_length: maxContextLength,
+        max_length: genLength,
+        temperature,
+        rep_pen: 1.1,
+        top_p: 0.92,
+        stop_sequence: NARRATION_STOP_SEQUENCES
+      },
       nsfw: !!c.hordeNsfw,
       trusted_workers: false
     };
@@ -2516,10 +2527,6 @@
     const conn = activeConnector();
     const characters = state.story.memory.characters || [];
 
-    // Distinguimos 3 cenários:
-    //   - noUpdates: usuário NÃO quer updates automáticos (reserva 0 ou sem personagens)
-    //   - twoPhase: updates em chamada separada (Horde/Colab)
-    //   - singleCallWithUpdates: updates na mesma chamada (OpenAI-compatible)
     const wantAutoUpdates = ((conn.updatesTokenBudget || 0) > 0) && characters.length > 0;
     const canTwoPhase = (conn.mode === 'horde' || conn.mode === 'colab');
     const useTwoPhase = canTwoPhase && wantAutoUpdates;
@@ -2537,10 +2544,6 @@
     ragUsed = p.ragUsed || 0;
     codeMap = p.codeMap || {};
 
-    // maxTokens da narração:
-    //   - two-phase: exatamente maxLength
-    //   - single-call com updates: maxLength + reserve (pra caber narração + bloco)
-    //   - sem updates: exatamente maxLength
     const narrationOpts = {};
     if (singleCallWithUpdates){
       narrationOpts.maxTokens = (conn.maxLength || 250) + (conn.updatesTokenBudget || 80);
@@ -2571,7 +2574,6 @@
       narrationResult.text = parsed.cleaned;
       updates = parsed.updates || [];
     }
-    // Se !wantAutoUpdates: não extrai nada (prompt não pediu updates)
 
     narrationResult.text = cleanNarrationText(narrationResult.text, narrationResult.cutOff);
     narrationResult.ragUsed = ragUsed;
@@ -2633,6 +2635,7 @@
     t = t.replace(/\*(.*?)\*/gs, '$1');
     t = t.replace(/\*/g, '');
     t = t.replace(/\[Lembrete[^\]]*\]/gi, ' ');
+    t = t.replace(/\[1ª pessoa[^\]]*\]/gi, ' ');
     t = t.replace(/\[JOGADOR\][:\s]*/gi, ' ');
     t = t.replace(/\[continue em primeira pessoa[^\]]*\]/gi, ' ');
     t = t.replace(/\[continue a cena naturalmente[^\]]*\]/gi, ' ');
@@ -2640,9 +2643,36 @@
     t = t.replace(/\[INST\][\s\S]*?\[\/INST\]/gi, ' ');
     t = t.replace(/<\|[^|]*\|>/g, ' ');
     t = t.replace(/===UPDATES===[\s\S]*?(?:===END\s*UPDATES===|$)/gi, ' ');
-    // Marcadores de update — agora também no meio de linha (defesa extra)
     t = t.replace(/\[[A-Za-z]\d{1,4}\]\s*(relationship|knows|wants|status)\s*:[^\n]*/gi, '');
     t = t.replace(/\[[A-Za-z]\d{1,4}\]/g, '');
+
+    // Filtros de conteúdo do prompt que costuma vazar (item 3)
+    t = t.replace(/PONTO DE VISTA[^\n]*/gi, '');
+    t = t.replace(/A NARRAÇÃO é em PRIMEIRA PESSOA[^\n]*/gi, '');
+    t = t.replace(/O DIÁLOGO \(falas[^\n]*/gi, '');
+    t = t.replace(/Outros personagens continuam em TERCEIRA PESSOA[^\n]*/gi, '');
+    t = t.replace(/FORMATO:[^\n]*/gi, '');
+    t = t.replace(/TAMANHO DA RESPOSTA:[^\n]*/gi, '');
+    t = t.replace(/Continue a história de forma coerente[^\n]*/gi, '');
+    t = t.replace(/Regra (geral de conhecimento|contra "telepatia")[^\n]*/gi, '');
+    t = t.replace(/REGRA CRÍTICA DE SAÍDA:[^\n]*/gi, '');
+    t = t.replace(/BLOCO DE ATUALIZAÇÕES[^\n]*/gi, '');
+    t = t.replace(/ATUALIZAÇÕES DE ESTADO[^\n]*/gi, '');
+    t = t.replace(/VOZ DA NARRAÇÃO[^\n]*/gi, '');
+    t = t.replace(/FICHAS DE PERSONAGENS[^\n]*/gi, '');
+    t = t.replace(/LOCAIS \(mantenha[^\n]*/gi, '');
+    t = t.replace(/GRUPOS \/ DINÂMICA FAMILIAR[^\n]*/gi, '');
+    t = t.replace(/RESUMO DOS CAPÍTULOS ANTERIORES[^\n]*/gi, '');
+    t = t.replace(/TRECHOS RELEVANTES DA HISTÓRIA[^\n]*/gi, '');
+    t = t.replace(/SEGREDOS DO MUNDO[^\n]*/gi, '');
+    t = t.replace(/Notas do autor \(siga sempre\):[^\n]*/gi, '');
+    t = t.replace(/INSTRUÇÃO ESPECÍFICA[^\n]*/gi, '');
+    t = t.replace(/Persona\/personagem principal:[^\n]*/gi, '');
+    t = t.replace(/Mundo\/cenário:[^\n]*/gi, '');
+    t = t.replace(/LEMBRETE FINAL:[^\n]*/gi, '');
+    t = t.replace(/^RESUMO:\s*$/gim, '');
+    t = t.replace(/^- (Narração|Diálogo)[^\n]*/gim, '');
+
     t = t.split('\n').filter(line => {
       const l = line.trim().toLowerCase();
       if (!l) return true;
@@ -3092,7 +3122,7 @@
   }
 
   function rewindTo(turnId){
-    if (state.ui.scenarioEditorOpen) return; // guarda extra
+    if (state.ui.scenarioEditorOpen) return;
     const s = state.story;
     const idx = s.turns.findIndex(t => t.id === turnId);
     if (idx === -1) return;
@@ -3119,6 +3149,10 @@
 
   let editingTurnId = null;
   function startEdit(id){
+    if (editingTurnId && editingTurnId !== id){
+      const ok = window.confirm('Descartar edição em andamento?');
+      if (!ok) return;
+    }
     editingTurnId = id;
     const t = state.story.turns.find(t => t.id === id);
     state.ui.editingDraft = { turnId: id, text: t ? t.text : '' };
@@ -3463,7 +3497,6 @@
   async function deleteScenario(id){
     const ok = window.confirm('Apagar este cenário pra sempre?\n\nAs aventuras criadas a partir dele NÃO são afetadas.');
     if (!ok) return;
-    // Se estamos editando esse cenário, fecha sem salvar (evita "ressuscitar")
     if (state.scenario && state.scenario.id === id){
       clearTimeout(scenarioSaveTimer);
       state.ui.scenarioEditorOpen = false;
@@ -4305,7 +4338,6 @@
     const label = (t.archived ? ' · arquivado' : '') + (t.isContinue ? ' · continuação' : '') + (t.isOpening ? ' · abertura' : '');
     const extra = extraClass ? ' ' + extraClass : '';
     if (isEditing){
-      // Preserva o conteúdo digitado pelo usuário (draft) em re-renders
       const draft = (state.ui.editingDraft && state.ui.editingDraft.turnId === t.id)
         ? state.ui.editingDraft.text
         : t.text;
@@ -4425,7 +4457,7 @@
         <button class="close icon ghost" id="closeSettings">✕</button>
         <h2>Configurações da API</h2>
         <div class="helpbox" style="margin-bottom:14px;">
-          Versão: <strong>1.0.1</strong>
+          Versão: <strong>1.0.2</strong> — stop sequences + POV em prosa + updates enxutos
         </div>
         <div class="field">
           <label>Provedor</label>
@@ -4590,7 +4622,6 @@
     const $ = sel => document.querySelector(sel);
     const $$ = sel => document.querySelectorAll(sel);
 
-    // Textarea de edição de turno: preserva draft em re-renders + auto-size
     $$('.turn-editbox').forEach(el => {
       el.addEventListener('input', e => {
         state.ui.editingDraft = { turnId: e.target.dataset.editbox, text: e.target.value };
